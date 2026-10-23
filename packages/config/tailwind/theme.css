@@ -1,0 +1,155 @@
+/*
+ * RestoOS design tokens — generated from /DESIGN.md. Change DESIGN.md first, then this file.
+ * Consumers: @import "tailwindcss"; @import "@restoos/config/tailwind/theme.css";
+ * Names follow shadcn/ui (--primary, --destructive, …) plus RestoOS extras.
+ */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #222222;
+  --body: #3f3f3f;
+  --card: #ffffff;
+  --card-foreground: #222222;
+  --popover: #ffffff;
+  --popover-foreground: #222222;
+  --primary: #c8361a; /* Masala, 5.25:1 with white */
+  --primary-foreground: #ffffff;
+  --primary-active: #a82d14;
+  --primary-disabled: #f3c4b8;
+  --secondary: #f2f2f2;
+  --secondary-foreground: #222222;
+  --muted: #f7f7f7;
+  --muted-foreground: #6a6a6a;
+  --accent: #f7f7f7;
+  --accent-foreground: #222222;
+  --destructive: #b91c1c;
+  --destructive-foreground: #ffffff;
+  --success: #147a3a;
+  --success-foreground: #ffffff;
+  --warning: #b45309;
+  --warning-foreground: #ffffff;
+  --info: #1d4ed8;
+  --info-foreground: #ffffff;
+  --veg: #1a8f3c;
+  --non-veg: #8b3a1a;
+  --border: #dddddd; /* decorative hairlines */
+  --input: #8f8f8f; /* form control outlines, 3.23:1 */
+  --ring: #222222;
+  --scrim: rgb(0 0 0 / 0.5);
+  --shadow-float:
+    0 0 0 1px rgb(0 0 0 / 0.02), 0 2px 6px rgb(0 0 0 / 0.04), 0 4px 8px rgb(0 0 0 / 0.1);
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #121212;
+  --foreground: #ededed;
+  --body: #cfcfcf;
+  --card: #1e1e1e;
+  --card-foreground: #ededed;
+  --popover: #1e1e1e;
+  --popover-foreground: #ededed;
+  --primary: #ff7a59; /* text on it is #121212, 7.30:1 */
+  --primary-foreground: #121212;
+  --primary-active: #ff8a6b;
+  --primary-disabled: #5a2a1f;
+  --secondary: #262626;
+  --secondary-foreground: #ededed;
+  --muted: #1e1e1e;
+  --muted-foreground: #a3a3a3;
+  --accent: #262626;
+  --accent-foreground: #ededed;
+  --destructive: #f87171;
+  --destructive-foreground: #121212;
+  --success: #4ade80;
+  --success-foreground: #121212;
+  --warning: #f59e0b;
+  --warning-foreground: #121212;
+  --info: #60a5fa;
+  --info-foreground: #121212;
+  --veg: #3fb862;
+  --non-veg: #e0875c;
+  --border: #2e2e2e;
+  --input: #737373;
+  --ring: #ededed;
+  --scrim: rgb(0 0 0 / 0.7);
+  --shadow-float: none;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-body: var(--body);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-active: var(--primary-active);
+  --color-primary-disabled: var(--primary-disabled);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-veg: var(--veg);
+  --color-non-veg: var(--non-veg);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-scrim: var(--scrim);
+
+  --font-sans:
+    var(--font-inter), var(--font-devanagari), system-ui, -apple-system, Roboto, sans-serif;
+
+  /* DESIGN.md shape scale: controls 8, cards 14, sheets 20, pills full */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 32px;
+
+  --shadow-float: var(--shadow-float);
+
+  /* Touch targets (CLAUDE.md rule 11): h-touch, h-touch-staff, h-touch-hero */
+  --spacing-touch: 2.75rem;
+  --spacing-touch-staff: 3.5rem;
+  --spacing-touch-hero: 4rem;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-tap-highlight-color: transparent;
+  }
+  button,
+  a,
+  [role="button"] {
+    touch-action: manipulation;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}

@@ -1,0 +1,4 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+/* Design tokens from DESIGN.md — edit DESIGN.md first, then packages/config/tailwind/theme.css */
+@import "@restoos/config/tailwind/theme.css";

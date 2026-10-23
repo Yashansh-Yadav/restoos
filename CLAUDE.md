@@ -1,0 +1,49 @@
+# CLAUDE.md — RestoOS
+
+Restaurant management PWA for India (POS, KOT, GST billing, QR menu, staff service bell, SaaS plans).
+**Full plan:** `docs/DEVELOPMENT_PLAN.md` — read the relevant sections before every task.
+
+## How to work
+- Implement **one task ID at a time** (e.g. `M5-T2`). Start in plan mode, propose, then implement.
+- After each task: run `pnpm check`, tick the checkbox in the plan, summarise changes.
+- If something isn't covered by the plan, **stop and ask**; then add it to the Decision log (Section 17).
+- Don't add dependencies without saying why. Prefer the stack in Section 2.
+
+## Commands
+- `pnpm dev` — web + server
+- `pnpm check` — typecheck + lint + unit/integration tests
+- `pnpm test:e2e` — Playwright
+- `pnpm db:migrate` / `pnpm db:reset` / `pnpm db:studio`
+
+## Hard rules
+1. **Money is integer paise. Tax rates are basis points.** Never use floats for money. All GST math lives in `packages/shared/src/gst.ts`.
+2. **Tenant isolation:** feature code uses `getTenantDb(ctx)` only — never import the raw Prisma client in `apps/web/src/features/**`.
+3. **Every mutation** checks permission (`requirePermission`) and, where relevant, entitlement (`hasFeature`) **on the server**. Hiding UI is not security.
+4. **Never block billing, KOT or printing** because of plan status, network, or a non-critical error.
+5. Bills are immutable snapshots; never delete bills or reuse invoice numbers. Cancel with reason.
+6. Sensitive actions (void, discount over cap, bill cancel, table merge/transfer, plan override, impersonation) call `audit()`.
+7. Offline-capable writes carry a `clientId` and are idempotent on the server.
+8. Customer personal data only with recorded consent. Show the Google review link to everyone — no review gating.
+9. Validate all inputs with zod schemas from `packages/shared`.
+10. **Owner auth is Google OAuth 2.0 + mobile OTP only** (via Better Auth). Never build custom sign-up/sign-in or email/password flows. Staff use device-bound PIN login.
+11. Respect the click budgets in Section 1 — staff screens must be operable one-handed with large touch targets (≥44px).
+
+## Code conventions
+- TypeScript strict, no `any`, no non-null assertions without a comment.
+- Feature modules: `apps/web/src/features/<feature>/{service.ts, actions.ts, queries.ts, schema.ts, components/}`. Business logic in `service.ts` (pure, takes `TenantContext`).
+- Server Components by default; `"use client"` only where interaction needs it.
+- Server Actions for internal UI mutations; Route Handlers under `/api` for public, device, sync and webhook calls.
+- After a successful write, call `publishEvent()` with a typed event from `packages/shared/src/events.ts`.
+- UI: shadcn/ui + Tailwind; mobile-first; support light/dark; Hindi strings via the i18n helper (no hardcoded customer-facing text).
+- Visual design follows `DESIGN.md` (tokens, components, do/don't) — read it before any UI task.
+
+## UI workflow (every task that touches UI)
+Precedence: hard rules above > `DESIGN.md` > `/web-interface-guidelines` > design skills. Skills inform; they never introduce a new palette, font or token set.
+1. **Plan** — read the relevant `DESIGN.md` sections. Query `ui-ux-pro-max` for UX rules/patterns of the screen type (`python .claude/skills/ui-ux-pro-max/scripts/search.py "<query>"` — use `python`, not `python3`, on this machine). Use `ui-styling` for shadcn/Tailwind patterns.
+2. **Build** — start from shadcn/ui; if a richer component is needed, search 21st.dev (MCP `21st`, needs `API_KEY_21ST`) and adapt it to `DESIGN.md` tokens. State any new dependency and why before adding it.
+3. **Polish** — apply `design-taste-frontend` for hierarchy, spacing, motion and critique (app-screen rules for staff/owner, page rules for customer/marketing).
+4. **Review** — run `/web-interface-guidelines <changed files>` and fix findings. Project overrides: money via `formatINR(paise)` (not raw `Intl.NumberFormat`); copy through i18n (Title Case for English only); staff screens may skip URL-synced state where it costs taps.
+5. **Verify in a browser** — use `playwright-cli` against `pnpm dev`: 360px and tablet widths, light + dark, English + Hindi; count taps against the Section 1 click budgets; check ≥44px targets; save screenshots of each state. Summarise results in the task summary.
+Committed E2E tests still use `@playwright/test` in `apps/web/e2e`; `playwright-cli` is for interactive verification.
+- Tests next to code (`*.test.ts`); E2E in `apps/web/e2e`.
+- Commit messages: `feat(M5-T2): create KOT on send`.

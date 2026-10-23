@@ -1,0 +1,4 @@
+{
+  "extends": "@restoos/config/tsconfig/node.json",
+  "include": ["src"]
+}
