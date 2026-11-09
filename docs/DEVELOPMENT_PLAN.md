@@ -51,15 +51,16 @@ A **web-only (PWA)** restaurant platform for the Indian market with three experi
 | Concern | Choice | Notes |
 |---|---|---|
 | Monorepo | **pnpm workspaces + Turborepo** | |
-| Web app | **Next.js (latest stable, App Router) + TypeScript (strict)** | Server Components by default; Server Actions for mutations from our own UI; Route Handlers for public/webhook/device APIs |
+| Backend API | **Node.js + Fastify 5 + TypeScript (strict)** in `apps/api` | Owns **everything server-side**: business logic, Prisma/DB, auth (owner + staff), REST API under `/api`, Socket.io, BullMQ workers, webhooks, offline sync, exports. Validation with zod via `fastify-type-provider-zod` (schemas from `packages/shared`); OpenAPI docs via `@fastify/swagger` |
+| Web app | **Next.js (latest stable, App Router) + TypeScript (strict)** — **frontend only** | Renders UI and the PWA. Server Components read from the API server-side (forwarding the user's cookies); client components call the API through a typed client + TanStack Query. **No business logic, DB access, Server Actions or API Route Handlers in Next.js** |
 | UI | **Tailwind CSS + shadcn/ui**, `lucide-react` icons | Mobile-first, large touch targets (min 44px) |
 | Client data | **TanStack Query** for client-side fetching/caching in staff screens | |
 | Forms & validation | **react-hook-form + zod**; zod schemas shared in `packages/shared` | |
 | Database | **PostgreSQL 16** | |
 | ORM | **Prisma** | Migrations via `prisma migrate` |
 | Cache / pub-sub / queues | **Redis** + **BullMQ** | Bell escalation timers, WhatsApp sends, reminders |
-| Real-time | **Socket.io** in a separate Node service (`apps/server`) | Next.js route handlers are not used for WebSockets |
-| Auth (owner) | **Google OAuth 2.0** + **mobile OTP** only, wired through **Better Auth** (Google social provider + phone-number plugin) | No custom sign-up/sign-in and no email/password. A first login by either method creates the account; Google and phone can be linked to the same owner. Re-evaluate if it blocks; record in decision log |
+| Real-time | **Socket.io** attached to the Fastify server in `apps/api` (Redis adapter when scaled horizontally) | Same process as the API, so `publishEvent()` emits directly |
+| Auth (owner) | **Google OAuth 2.0** + **mobile OTP** only, wired through **Better Auth** mounted in `apps/api` at `/api/auth/*` (Google social provider + phone-number plugin) | No custom sign-up/sign-in and no email/password. A first login by either method creates the account; Google and phone can be linked to the same owner. Re-evaluate if it blocks; record in decision log |
 | Auth (staff) | Custom **device-bound PIN sessions** | See Section 6.3 |
 | Push | **Web Push (VAPID)** via `web-push` | |
 | PWA / offline | **Serwist** (service worker) + **Dexie** (IndexedDB) | |
@@ -80,28 +81,33 @@ A **web-only (PWA)** restaurant platform for the Indian market with three experi
 ## 3. Architecture overview
 
 ```
-                 ┌──────────────────────────────────────────────┐
- Customer phone  │  apps/web  (Next.js PWA)                      │
- Staff devices ──►  /t/*  /staff/*  /owner/*  /admin/*  /api/*   │
- Owner browser   │  Server Components · Server Actions · Route   │
-                 │  Handlers · Service Worker (Serwist)          │
-                 └───────────────┬───────────────┬──────────────┘
-                                 │ Prisma        │ publish events (Redis)
-                         ┌───────▼──────┐  ┌─────▼───────────────────┐
-                         │ PostgreSQL   │  │ Redis (pub/sub + BullMQ)│
-                         └───────▲──────┘  └─────▲───────────────────┘
-                                 │               │
-                 ┌───────────────┴───────────────┴──────────────┐
-                 │  apps/server  (Node)                          │
-                 │  • Socket.io gateway (rooms per outlet/role)  │
-                 │  • BullMQ workers: bell escalation, web push, │
-                 │    WhatsApp, AMC/subscription reminders       │
-                 └──────────────────────────────────────────────┘
- Payment webhooks (Razorpay) ──► apps/web /api/webhooks/*
- LAN printers ◄── apps/print-bridge (optional, runs on counter PC)
+ Customer phone ─┐                       Caddy (one domain, TLS)
+ Staff devices  ─┼──► https://app.… ──┬── /api/*, /socket.io/* ──► apps/api
+ Owner browser  ─┘                    └── everything else ───────► apps/web
+
+ ┌──────────────────────────────────┐   REST /api/*    ┌───────────────────────────────────┐
+ │ apps/web  (Next.js, frontend)    │ ───────────────► │ apps/api  (Node.js + Fastify)     │
+ │ /t/* /staff/* /owner/* /admin/*  │   (server-side   │ • REST routes (zod-validated)     │
+ │ Server Components (read via API) │    fetch with    │ • Better Auth  /api/auth/*        │
+ │ Client: TanStack Query + typed   │    cookies, or   │ • Staff PIN sessions, permissions │
+ │ API client · Socket.io client    │    from browser) │ • Services + getTenantDb (Prisma) │
+ │ Service Worker (Serwist) + Dexie │ ◄─── sockets ─── │ • Socket.io gateway (rooms)       │
+ └──────────────────────────────────┘                  │ • BullMQ workers (bell escalation,│
+                                                       │   push, WhatsApp, reminders)      │
+ Razorpay / WhatsApp webhooks ───────────────────────► │ • Webhooks, /api/sync, exports    │
+                                                       └──────┬──────────────────┬─────────┘
+ LAN printers ◄── apps/print-bridge (optional)                │ Prisma           │ ioredis
+                                                       ┌──────▼──────┐   ┌───────▼────────┐
+                                                       │ PostgreSQL  │   │ Redis (BullMQ, │
+                                                       └─────────────┘   │ cache, adapter)│
+                                                                         └────────────────┘
 ```
 
-**Rule:** all writes go through `apps/web` (Server Actions / Route Handlers) → DB → then publish a domain event to Redis. `apps/server` fans events out to sockets and runs timed jobs. `apps/server` may write to the DB only for job outcomes (e.g. bell escalation).
+**Rules:**
+- **All reads and writes go through `apps/api`.** `apps/web` never touches the database, Redis or secrets; it only calls the API.
+- A write = route (auth + zod validation + permission/entitlement check) → `service.ts` → DB → `publishEvent()` → Socket.io rooms.
+- Browser and API share one origin (Caddy in prod, Next.js `rewrites` of `/api/*` in dev), so auth cookies are first-party and there is no CORS for the app itself.
+- Workers run from the same `apps/api` codebase (a separate `worker` entry point so they can scale independently).
 
 ---
 
@@ -113,19 +119,28 @@ restoos/
 ├─ docs/
 │  └─ DEVELOPMENT_PLAN.md
 ├─ apps/
-│  ├─ web/                      # Next.js app
+│  ├─ api/                      # Node.js + Fastify backend — owns all server-side logic
+│  │  └─ src/
+│  │     ├─ modules/<feature>/  # menu, floor, orders, billing, bell, staff, devices, sync, ...
+│  │     │  ├─ routes.ts        # Fastify routes: auth, zod schemas, permission check, call service
+│  │     │  ├─ service.ts       # business logic (pure, takes TenantContext)
+│  │     │  └─ *.test.ts
+│  │     ├─ lib/                # tenant (getTenantDb), permissions, entitlements, events, audit
+│  │     ├─ plugins/            # Fastify plugins: auth, session, rate-limit, errors, socket
+│  │     ├─ socket/             # Socket.io gateway + room joining
+│  │     ├─ jobs/               # BullMQ queues + processors
+│  │     ├─ app.ts              # buildApp() — used by server, worker and tests
+│  │     ├─ server.ts           # HTTP + Socket.io entry
+│  │     └─ worker.ts           # BullMQ worker entry
+│  ├─ web/                      # Next.js — frontend only (no DB, no business logic)
 │  │  ├─ src/app/
 │  │  │  ├─ (customer)/t/[tableToken]/...     # menu, cart, bell, bill, feedback
 │  │  │  ├─ (staff)/staff/...                 # login, tables, order, kitchen, bills, bell
 │  │  │  ├─ (owner)/owner/...                 # dashboard, menu, floor, staff, reports, billing
-│  │  │  ├─ (admin)/admin/...                 # platform admin
-│  │  │  └─ api/                              # route handlers (device, public, webhooks, sync)
-│  │  ├─ src/features/          # feature modules: menu, floor, orders, billing, bell, ...
-│  │  │  └─ <feature>/{actions.ts, queries.ts, components/, schema.ts, service.ts}
-│  │  ├─ src/lib/               # auth, tenant, permissions, entitlements, events, money
+│  │  │  └─ (admin)/admin/...                 # platform admin
+│  │  ├─ src/features/<feature>/{api.ts, hooks.ts, components/}  # API calls, TanStack Query hooks, UI
+│  │  ├─ src/lib/               # api client, socket client, i18n, formatting
 │  │  └─ src/sw/                # service worker (Serwist)
-│  ├─ server/                   # Socket.io + BullMQ workers
-│  │  └─ src/{socket/, jobs/, index.ts}
 │  └─ print-bridge/             # (M6, optional) tiny Node app for LAN printers
 ├─ packages/
 │  ├─ db/                       # Prisma schema, client, seed
@@ -137,7 +152,7 @@ restoos/
 └─ package.json
 ```
 
-**Feature module rule:** business logic lives in `service.ts` (pure, testable, takes a `TenantContext`). `actions.ts` / route handlers only do auth, validation, call the service, and publish events.
+**Feature module rule:** in `apps/api`, business logic lives in `service.ts` (pure, testable, takes a `TenantContext`). `routes.ts` only does auth, zod validation, permission/entitlement checks, calls the service, and publishes events. In `apps/web`, `features/<feature>/api.ts` wraps the API calls and `hooks.ts` exposes them as TanStack Query hooks; request/response types come from the shared zod schemas in `packages/shared`.
 
 ---
 
@@ -162,7 +177,7 @@ restoos/
 ### 5.3 Tenancy
 - `Organization` (the business) → `Outlet` (a location). Almost every table carries `organizationId`, and outlet-level data carries `outletId`.
 - Every service function receives a `TenantContext { organizationId, outletId?, actor }`.
-- **All Prisma access goes through `getTenantDb(ctx)`** — a Prisma client extension that injects `organizationId` (and `outletId` where applicable) into every query. Direct `prisma.*` usage outside `packages/db` and admin code is a lint error.
+- **All Prisma access goes through `getTenantDb(ctx)`** — a Prisma client extension that injects `organizationId` (and `outletId` where applicable) into every query. Direct `prisma.*` usage in `apps/api/src/modules/**` is a lint error (only `apps/api/src/lib/tenant.ts`, platform-admin code and `packages/db` may use the raw client). `apps/web` has no database access at all.
 - Tests must include a cross-tenant leak test for every new model.
 
 ### 5.4 Roles and permissions
@@ -188,7 +203,7 @@ Roles: `OWNER`, `MANAGER`, `CASHIER`, `BUTLER`, `KITCHEN`. Permissions are code-
 | `staff.manage` | ✅ | ✅ | | | |
 | `billing.manageSubscription` | ✅ | | | | |
 
-`*` capped by outlet setting. Implement as `can(actor, permission, resource?)` in `src/lib/permissions.ts`, enforced **server-side** in every action; UI hides what the user can't do.
+`*` capped by outlet setting. Implement as `can(actor, permission, resource?)` in `apps/api/src/lib/permissions.ts`, enforced **in the API** on every route (`requirePermission()` as a Fastify `preHandler`); the web UI hides what the user can't do using the actor's permissions returned by `GET /api/me`.
 
 ### 5.5 Entitlements (plans)
 - Code never checks plan names. It checks `hasFeature(outletId, FeatureKey)` and `getLimit(outletId, LimitKey)`.
@@ -754,30 +769,40 @@ enum LicenceStatus { ACTIVE AMC_DUE GRACE CORE_MODE }
 
 ## 7. API surface
 
-**Server Actions** for mutations triggered from our own UI (owner and staff screens). **Route Handlers** under `/api` for anything called by the customer page, devices, the service worker sync, webhooks, or `apps/server`.
+Every endpoint lives in **`apps/api`** (Fastify) under `/api`. The Next.js app calls these from Server Components (server-side, forwarding cookies to `API_INTERNAL_URL`) or from the browser (same origin `/api/*`). Groups:
+
+- `/api/auth/*` — Better Auth (Google OAuth callback, phone OTP send/verify, session)
+- `/api/me` — current actor, role, permissions, outlet, entitlements
+- `/api/staff/*` — authenticated staff/owner operations (orders, KOTs, bills, payments, tables, bell responses, …), one route file per module
+- `/api/owner/*` — owner/manager operations (menu, floor, staff, devices, reports, billing)
+- `/api/admin/*` — platform admin
+- `/api/public/*` — customer page (no login; scoped by `qrToken`)
+- `/api/device/*`, `/api/sync`, `/api/push/*`, `/api/webhooks/*`, `/api/export/*` — below
+
+Notable routes:
 
 | Route | Purpose |
 |---|---|
-| `GET /api/public/table/[qrToken]` | Outlet + table + menu payload for the customer page (cached, revalidated on menu change) |
-| `POST /api/public/table/[qrToken]/order` | Customer self-order (entitlement + ordering mode checked) |
-| `POST /api/public/table/[qrToken]/bell` | Ring bell `{ target }` |
-| `POST /api/public/bell/[id]/cancel` · `/feedback` | Customer cancel / thumbs |
-| `GET /api/public/table/[qrToken]/bill` | Current bill + UPI QR payload |
+| `GET /api/public/table/:qrToken` | Outlet + table + menu payload for the customer page (cached in Redis, busted on menu change) |
+| `POST /api/public/table/:qrToken/order` | Customer self-order (entitlement + ordering mode checked) |
+| `POST /api/public/table/:qrToken/bell` | Ring bell `{ target }` |
+| `POST /api/public/bell/:id/cancel` · `/feedback` | Customer cancel / thumbs |
+| `GET /api/public/table/:qrToken/bill` | Current bill + UPI QR payload |
 | `POST /api/public/feedback` | Private rating after payment |
 | `POST /api/device/pair` | Device pairing |
 | `POST /api/device/invoice-block` | Allocate next invoice block |
 | `POST /api/sync` | Offline sync batch (orders, KOTs, bills, payments) with idempotency keys |
 | `POST /api/push/subscribe` | Save Web Push subscription |
-| `POST /api/bell/[id]/respond` | `{ action: ACCEPT | DECLINE | DONE, reason? }` — used from notification action buttons |
+| `POST /api/bell/:id/respond` | `{ action: ACCEPT | DECLINE | DONE, reason? }` — used from notification action buttons |
 | `POST /api/webhooks/razorpay` | Payment + subscription webhooks (signature verified) |
 | `POST /api/webhooks/whatsapp` | Delivery status |
-| `GET /api/export/[report]` | Excel exports |
+| `GET /api/export/:report` | Excel exports |
 
-All public endpoints: zod-validated, rate-limited (Redis), never expose internal IDs beyond what's necessary.
+All endpoints: zod-validated request **and** response schemas (shared with the web client), consistent error shape `{ error: { code, message } }`. Public endpoints are rate-limited (Redis) and never expose internal IDs beyond what's necessary. OpenAPI spec served at `/api/docs` in dev.
 
 ## 8. Real-time event catalog
 
-Publish via `publishEvent(event)` in `apps/web/src/lib/events.ts` → Redis channel `outlet:{outletId}`. `apps/server` relays to Socket.io rooms.
+Publish via `publishEvent(event)` in `apps/api/src/lib/events.ts` after a successful write; it emits straight to the Socket.io rooms (same process). With several API instances, the Socket.io Redis adapter fans events out across them; BullMQ workers publish through the same adapter.
 
 **Rooms:** `outlet:{id}:staff`, `outlet:{id}:role:{ROLE}`, `outlet:{id}:employee:{employeeId}`, `outlet:{id}:kitchen`, `outlet:{id}:owner`, `table:{qrToken}` (customer page).
 
@@ -842,25 +867,27 @@ Milestones are grouped into phases. Each phase ends in a **demo you can run** an
 **Known gaps in phase order** (decide before the phase that hits them):
 1. **Entitlements are built in M12 (P8) but needed from P3** (`CUSTOMER_SELF_ORDER` in M5-T6, `BELL_SYSTEM` in M8, `STAFF_ANALYTICS` in M10-T3). Proposal: add a stub `hasFeature()`/`getLimit()` in P1 (M1-T4) that reads the seeded plan, so call sites exist from day one and M12 only replaces the resolver.
 2. **M5-T5 (VOID KOT print) depends on M6 printing**, and **M6-T3 auto-print bill depends on M7 bills.** Proposal: do M5-T5's print part in M6, and the bill half of M6-T3 inside M7-T1.
-3. **Real-time (M4) is in P3, but M2-T4 stock toggle (P2) emits `menu.stockChanged`.** Proposal: M2-T4 calls `publishEvent()` against a no-op/in-memory publisher; M4-T2 swaps in Redis.
+3. **Real-time (M4) is in P3, but M2-T4 stock toggle (P2) emits `menu.stockChanged`.** Proposal: M2-T4 calls `publishEvent()` with no Socket.io attached yet (a no-op emitter); M4-T2 attaches Socket.io.
 
 ### M0 — Foundations (week 1)
 - [x] **M0-T1** Scaffold monorepo (pnpm, Turborepo), `apps/web` (Next.js, TS strict, Tailwind, shadcn/ui), `apps/server`, `packages/{db,shared,print,config}`.
+- [ ] **M0-T1b** Separate backend: rename `apps/server` → `apps/api` and rebuild it on **Fastify 5** (`buildApp()` factory, `server.ts` + `worker.ts` entries, zod type provider, error handler with `{ error: { code, message } }`, `GET /api/health`, OpenAPI at `/api/docs` in dev). Next.js `rewrites` `/api/*` → API in dev; remove the Next.js `/api/health` route; `API_INTERNAL_URL` for server-side fetches; typed `apiFetch()` client in `apps/web/src/lib/api.ts`.
+  *Accept:* `pnpm dev` runs both; `GET http://localhost:3000/api/health` is answered by Fastify through the rewrite; Fastify route tests via `app.inject()`; `pnpm check` passes.
   *Accept:* `pnpm dev` runs web + server; `pnpm check` (= typecheck + lint + test) passes.
 - [ ] **M0-T2** `docker-compose.yml` with Postgres 16 and Redis; Prisma set up in `packages/db` with the Section 6 schema; first migration; seed script.
   *Accept:* `pnpm db:reset` migrates and seeds; seed prints demo PINs.
-- [ ] **M0-T3** Env validation (zod) in `src/env.ts` for web and server; `.env.example`.
+- [ ] **M0-T3** Env validation (zod) in `src/env.ts` for web (public + `API_INTERNAL_URL` only) and api (all secrets); `.env.example`.
   *Accept:* app fails fast with a clear message on missing env.
 - [ ] **M0-T4** Testing: Vitest (unit + integration against a test DB), Playwright (one smoke test); GitHub Actions CI running `pnpm check` and Playwright.
 - [ ] **M0-T5** `packages/shared`: `money.ts` (paise helpers, `formatINR`), `gst.ts` (Section 5.1 calculation), zod enums mirroring Prisma enums.
   *Accept:* ≥95% coverage on `gst.ts`, including inclusive vs exclusive pricing, multi-rate bills, proportional bill discount, service charge, and round-off edge cases.
-- [ ] **M0-T6** Sentry + pino logging wired in web and server.
+- [ ] **M0-T6** Sentry wired in web and api; pino structured logging via Fastify's logger (request id on every log line).
 
 ### M1 — Tenancy, auth, roles (week 1–2)
 - [ ] **M1-T1** Owner login via **Google OAuth 2.0** and **mobile OTP** only (Better Auth Google provider + phone-number plugin). No email/password, no custom sign-up form: first successful login creates the user, then routes to onboarding (M1-T2). Owner can link Google and phone to one account. OTP sending behind an `OtpProvider` interface with a console adapter for dev; OTP rate-limited (Redis) and expiring.
   *Accept:* E2E: phone OTP login (console adapter) → onboarding; Google login covered by a mocked OAuth callback test; no email/password route exists.
 - [ ] **M1-T2** Onboarding wizard: organization → first outlet (name, address, state, GSTIN, FSSAI, tax inclusive?, invoice code). Max 3 screens.
-- [ ] **M1-T3** `getTenantDb(ctx)` Prisma extension + lint rule banning raw `prisma` imports in `apps/web/src/features/**`.
+- [ ] **M1-T3** `getTenantDb(ctx)` Prisma extension + lint rule banning raw `prisma` imports in `apps/api/src/modules/**` and any `@restoos/db` import in `apps/web`.
   *Accept:* integration test proves an outlet cannot read another org's menu/bills.
 - [ ] **M1-T4** Permissions module (Section 5.4) with `can()` + `requirePermission()` helper for actions.
   *Accept:* table-driven test covering every role × permission.
@@ -875,7 +902,7 @@ Milestones are grouped into phases. Each phase ends in a **demo you can run** an
 - [ ] **M2-T3** Excel import: upload → parse → validate every row (zod) → **preview screen** showing new/updated/error rows with row+column messages → commit in one transaction. Upsert by item `code` when present.
   *Accept:* a file with 3 bad rows shows exactly those 3 errors and commits nothing until fixed or the owner chooses "import valid rows only".
 - [ ] **M2-T4** One-tap "Out of stock" toggle (owner, manager, cashier, kitchen) → emits `menu.stockChanged`.
-- [ ] **M2-T5** Menu payload builder for the customer page, cached with tag revalidation on any menu change.
+- [ ] **M2-T5** Menu payload builder for the customer page (`GET /api/public/table/:qrToken`), cached in Redis and busted on any menu change.
 
 ### M3 — Floor and tables (week 3)
 - [ ] **M3-T1** Sections and tables editor in `/owner/floor` (grid layout, drag to position, bulk-add "T1–T20").
@@ -885,8 +912,8 @@ Milestones are grouped into phases. Each phase ends in a **demo you can run** an
   *Accept:* invalid transitions throw; unit tests cover the full state machine.
 
 ### M4 — Real-time backbone (week 3–4)
-- [ ] **M4-T1** `apps/server` Socket.io with auth (staff session cookie / owner session / customer qrToken), room joining per Section 8.
-- [ ] **M4-T2** `publishEvent` in web → Redis → server relay. Typed event map in `packages/shared/src/events.ts`.
+- [ ] **M4-T1** Socket.io on the `apps/api` Fastify server with auth (staff session cookie / owner session / customer qrToken), room joining per Section 8; Redis adapter.
+- [ ] **M4-T2** `publishEvent()` in `apps/api` → Socket.io rooms (and from workers via the Redis adapter). Typed event map in `packages/shared/src/events.ts`.
 - [ ] **M4-T3** `useOutletSocket()` client hook with reconnection + TanStack Query invalidation.
   *Accept:* E2E: toggling stock on one browser updates the customer menu in another within 2s.
 
@@ -922,7 +949,7 @@ Milestones are grouped into phases. Each phase ends in a **demo you can run** an
 - [ ] **M8-T1** Web Push setup: VAPID keys, subscribe flow during staff login with a mandatory "Enable notifications" step and a **"Test bell"** button that confirms delivery end-to-end; store `PushSubscription`; prune dead endpoints.
 - [ ] **M8-T2** Customer bell UI on `/t/[qrToken]`: 🔔 → Butler / Cashier / Manager → live status ("Notifying…", "Rahul is coming 🙋", "Done — was this handled? 👍👎"), cancel, cooldown, muted-table message.
 - [ ] **M8-T3** Bell service + routing (Section 5.7): create `BellEvent`, resolve level-0 recipients (assigned butler / on-shift role), create `BellAttempt`s, emit `bell.rung`, send push with action buttons (Accept / Busy), schedule BullMQ timeout job.
-- [ ] **M8-T4** Escalation worker in `apps/server`: on timeout → mark open attempts `MISSED` → next level recipients → new attempts → re-schedule; after last level → `UNANSWERED` + alert manager/owner.
+- [ ] **M8-T4** Escalation worker in `apps/api` (`worker.ts`): on timeout → mark open attempts `MISSED` → next level recipients → new attempts → re-schedule; after last level → `UNANSWERED` + alert manager/owner.
 - [ ] **M8-T5** Staff response: Accept (1 tap from notification or in-app full-screen bell alert), Busy with reason (2 taps), Done. Accepting cancels the timeout job and marks other open attempts `SUPERSEDED`. Race-safe (DB transaction + row lock).
 - [ ] **M8-T6** **Station mode** for devices flagged `isStation`: full-screen bell board, loud looping sound + vibration until accepted, Screen Wake Lock, "tap to enable sound" gate on start (autoplay policy).
 - [ ] **M8-T7** Manager tools: mute table 30 min, rotate table QR token, live bell board.
@@ -1019,10 +1046,10 @@ PLATFORM_LEGAL_NAME=
 ## 14. Deployment
 
 - **Staging** and **production** on AWS Mumbai (`ap-south-1`).
-- Containers: `web` (Next.js standalone output), `server` (Socket.io + workers), Caddy (TLS, routes `/socket.io` to `server`).
+- Containers: `web` (Next.js standalone output, frontend only), `api` (Fastify + Socket.io), `worker` (same `apps/api` image, `worker.ts` entry), Caddy (TLS; routes `/api/*` and `/socket.io/*` to `api`, everything else to `web`).
 - Postgres: RDS with automated backups + PITR. Redis: managed or container with AOF persistence.
 - Migrations run as a release step before the new `web` container takes traffic. Only backwards-compatible migrations in a single release (expand → migrate → contract).
-- Sticky sessions not required (Socket.io with Redis adapter when scaling `server` horizontally).
+- Sticky sessions not required (Socket.io with Redis adapter when scaling `api` horizontally).
 
 ## 15. Plans and entitlements seed
 
@@ -1068,6 +1095,7 @@ Prices exclude 18% GST and are stored in the DB (paise), editable from `/admin` 
 | 2026-10-23 | Owner auth = Google OAuth 2.0 + mobile OTP only; no custom sign-up/sign-in, no email/password. Staff keep device-bound PIN login (Section 6.3) | Product owner decision; fewer passwords to manage, phone-first users in India |
 | 2026-10-23 | Toolchain pins: pnpm 12.15, TypeScript **6.0.x** (not 7), ESLint **9.39** (not 10), Next 16.4, Tailwind 4.3 (CSS-first; tokens in `packages/config/tailwind/theme.css`) | typescript-eslint supports TS < 6.1 only; eslint-config-next plugins safest on ESLint 9. Revisit when typescript-eslint supports TS 7 |
 | 2026-10-23 | Internal packages (`@restoos/*`) ship TS source, no build step; `apps/server` runs via `tsx` (dev and start), `build` = typecheck | Simplest monorepo setup; production bundling of the server revisited in M14-T5 |
+| 2026-10-23 | **Separate Node.js backend.** `apps/api` (Fastify 5) owns all server-side work: business logic, DB, auth, REST API, Socket.io, BullMQ workers, webhooks, sync. Next.js is frontend-only (no Server Actions, no DB, no API route handlers). Supersedes the 2026-10-21 `apps/server` decision. Same origin via Caddy / Next `rewrites` | Product owner decision: clean separation; one API reusable by a future native app or partners. Fastify chosen for speed, TypeScript + zod support, low boilerplate |
 | | *(add new decisions here)* | |
 
 ## 18. Open questions (resolve before the milestone that needs them)
