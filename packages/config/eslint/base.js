@@ -34,6 +34,8 @@ export function base(tsconfigRootDir) {
       },
     },
     strictTsRules,
+    // Fastify plugins are async by convention even when they don't await.
+    { rules: { "@typescript-eslint/require-await": "off" } },
     { files: ["**/*.{js,mjs,cjs}"], ...tseslint.configs.disableTypeChecked },
   );
 }
