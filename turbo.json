@@ -1,6 +1,8 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "ui": "stream",
+  "globalDependencies": [".env"],
+  "globalEnv": ["NODE_ENV"],
   "tasks": {
     "generate": {
       "inputs": ["prisma/schema.prisma", "prisma.config.ts"],
@@ -13,6 +15,7 @@
     },
     "build": {
       "dependsOn": ["^build", "^generate", "generate"],
+      "env": ["API_INTERNAL_URL", "NEXT_PUBLIC_*"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]
     },
     "typecheck": {

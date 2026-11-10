@@ -878,7 +878,7 @@ Milestones are grouped into phases. Each phase ends in a **demo you can run** an
   *Accept:* `pnpm dev` runs web + server; `pnpm check` (= typecheck + lint + test) passes.
 - [x] **M0-T2** `docker-compose.yml` with Postgres 16 and Redis; Prisma set up in `packages/db` with the Section 6 schema; first migration; seed script.
   *Accept:* `pnpm db:reset` migrates and seeds; seed prints demo PINs.
-- [ ] **M0-T3** Env validation (zod) in `src/env.ts` for web (public + `API_INTERNAL_URL` only) and api (all secrets); `.env.example`.
+- [x] **M0-T3** Env validation (zod) in `src/env.ts` for web (public + `API_INTERNAL_URL` only) and api (all secrets); `.env.example`.
   *Accept:* app fails fast with a clear message on missing env.
 - [ ] **M0-T4** Testing: Vitest (unit + integration against a test DB), Playwright (one smoke test); GitHub Actions CI running `pnpm check` and Playwright.
 - [ ] **M0-T5** `packages/shared`: `money.ts` (paise helpers, `formatINR`), `gst.ts` (Section 5.1 calculation), zod enums mirroring Prisma enums.
@@ -1105,6 +1105,8 @@ Prices exclude 18% GST and are stored in the DB (paise), editable from `/admin` 
 | 2026-11-10 | Seed uses **fixed demo PINs** (manager 1001, cashier 2001, butlers 3001–3003, kitchen 4001), stored as argon2 hashes; demo tenant created once, plans always upserted | Seed stays idempotent and can print PINs on every run. Dev data only — never seed staging/prod |
 | 2026-11-10 | `pnpm check` runs turbo with `--concurrency=4` | With 16 parallel tasks the API tests were CPU-starved (27s vs 2.4s alone) |
 | 2026-11-10 | Prisma blocks AI agents from destructive commands (`migrate reset`) without the user's explicit consent; Claude must ask every time | Safety guard; agreed for the M0-T2 acceptance run on the local dev DB |
+| 2026-11-10 | **Env policy:** one repo-root `.env` (loaded with Node's `process.loadEnvFile()` when the file exists; real env vars win; deployed servers have no file). Validated with zod at startup by `apps/api/src/env.ts` and `apps/web/src/env.ts` via `parseEnv()` from `@restoos/shared/env` (lists every problem, never prints values). Variables are **required only once code uses them**; integration secrets stay optional (format-checked) until their milestone makes them required (e.g. `BETTER_AUTH_SECRET`/Google/OTP in M1-T1) | `pnpm dev` works without fake keys, malformed values still fail fast; secrets never leak into logs |
+| 2026-11-10 | `@restoos/shared/env` is browser-safe; the `.env` file loader is a separate Node-only entry `@restoos/shared/env/node` | Web client code imports shared schemas; `node:fs` must not reach the browser bundle |
 | | *(add new decisions here)* | |
 
 ## 18. Open questions (resolve before the milestone that needs them)

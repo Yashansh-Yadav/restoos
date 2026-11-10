@@ -1,12 +1,15 @@
 import { buildApp } from "./app";
+import { loadApiEnvOrExit } from "./env";
 
-// Env validation with zod arrives in M0-T3; until then HOST/PORT have defaults.
-const host = process.env.HOST ?? "0.0.0.0";
-const port = Number(process.env.PORT ?? 4000);
-const isProd = process.env.NODE_ENV === "production";
+// Fail fast: validate every env var before anything else starts (M0-T3).
+const env = loadApiEnvOrExit();
+const isProd = env.NODE_ENV === "production";
 
 const app = await buildApp({
-  logger: isProd ? true : { transport: { target: "pino-pretty", options: { colorize: true } } },
+  logger: isProd
+    ? { level: env.LOG_LEVEL }
+    : { level: env.LOG_LEVEL, transport: { target: "pino-pretty", options: { colorize: true } } },
+  docs: !isProd,
 });
 
 async function shutdown(signal: string): Promise<void> {
@@ -19,7 +22,7 @@ process.on("SIGTERM", () => void shutdown("SIGTERM"));
 process.on("SIGINT", () => void shutdown("SIGINT"));
 
 try {
-  await app.listen({ host, port });
+  await app.listen({ host: env.HOST, port: env.PORT });
 } catch (err) {
   app.log.error(err);
   process.exit(1);

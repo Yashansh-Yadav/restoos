@@ -1,5 +1,6 @@
 import { apiErrorSchema } from "@restoos/shared";
 import type { z } from "zod";
+import { loadWebServerEnv } from "@/env";
 
 /** An error response from apps/api, in the shared `{ error: { code, message } }` shape. */
 export class ApiError extends Error {
@@ -17,7 +18,7 @@ export class ApiError extends Error {
 // Browser: same-origin `/api/*` (Next rewrite / Caddy). Server: call the API directly.
 function baseUrl(): string {
   if (typeof window !== "undefined") return "";
-  return process.env.API_INTERNAL_URL ?? "http://localhost:4000";
+  return loadWebServerEnv().API_INTERNAL_URL;
 }
 
 /**
