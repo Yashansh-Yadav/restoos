@@ -252,7 +252,9 @@ Customer may CANCEL while not yet ACCEPTED.
 
 ### 6.1 Prisma schema (starting point)
 
-> Lives in `packages/db/prisma/schema.prisma`. Conventions: `id` = cuid2 string, `createdAt`/`updatedAt` on every model, money in paise (`Int`), rates in bps (`Int`). Add indexes on every `organizationId`, `outletId`, and frequently filtered status/time fields. Better Auth adds its own tables (`user`, `session`, `account`, `verification`); `OwnerAccount` links to its `userId`.
+> **Source of truth is now `packages/db/prisma/schema.prisma`** (implemented in M0-T2); the block below is the original starting point. Implemented differences: Prisma 7 syntax (`prisma-client` generator, URL in `prisma.config.ts`), `cuid(2)` ids, `organizationId` on **every** tenant table (child rows too), full `@relation`s (`Restrict` for bills/orders/payments, `Cascade` only for editable menu children and sessions), `createdAt`/`updatedAt` everywhere except append-only ledgers (`AuditLog`, `MessageCredit`), `MenuCategory.nameHi`, `ItemVariant.sortOrder`, `Payment.clientId` (offline idempotency), `PlanFeature.limitValue = -1` means unlimited.
+>
+> Original conventions: `id` = cuid2 string, `createdAt`/`updatedAt` on every model, money in paise (`Int`), rates in bps (`Int`). Add indexes on every `organizationId`, `outletId`, and frequently filtered status/time fields. Better Auth adds its own tables (`user`, `session`, `account`, `verification`); `OwnerAccount` links to its `userId`.
 
 ```prisma
 generator client { provider = "prisma-client-js" }
@@ -753,7 +755,7 @@ enum SubscriptionStatus { TRIALING ACTIVE PAST_DUE GRACE CORE_MODE CANCELLED }
 enum LicenceStatus { ACTIVE AMC_DUE GRACE CORE_MODE }
 ```
 
-> Claude Code: add `organizationId` to outlet-scoped models where the tenant extension needs it, add the missing `@relation`s and indexes when implementing each milestone, and keep this section updated if the schema diverges.
+> Claude Code: change `packages/db/prisma/schema.prisma` (with a migration) when a milestone needs new fields, and list notable divergences in the note at the top of this section.
 
 ### 6.2 Seed data
 `packages/db/prisma/seed.ts` creates: plans + plan features (Section 15), one demo organization, one outlet, 2 sections, 12 tables, 1 manager, 1 cashier, 3 butlers, 1 kitchen user (PINs printed to console), a demo menu (~30 items with variants/add-ons/mixed GST), and 2 devices.
@@ -874,7 +876,7 @@ Milestones are grouped into phases. Each phase ends in a **demo you can run** an
 - [x] **M0-T1b** Separate backend: rename `apps/server` → `apps/api` and rebuild it on **Fastify 5** (`buildApp()` factory, `server.ts` + `worker.ts` entries, zod type provider, error handler with `{ error: { code, message } }`, `GET /api/health`, OpenAPI at `/api/docs` in dev). Next.js `rewrites` `/api/*` → API in dev; remove the Next.js `/api/health` route; `API_INTERNAL_URL` for server-side fetches; typed `apiFetch()` client in `apps/web/src/lib/api.ts`.
   *Accept:* `pnpm dev` runs both; `GET http://localhost:3000/api/health` is answered by Fastify through the rewrite; Fastify route tests via `app.inject()`; `pnpm check` passes.
   *Accept:* `pnpm dev` runs web + server; `pnpm check` (= typecheck + lint + test) passes.
-- [ ] **M0-T2** `docker-compose.yml` with Postgres 16 and Redis; Prisma set up in `packages/db` with the Section 6 schema; first migration; seed script.
+- [x] **M0-T2** `docker-compose.yml` with Postgres 16 and Redis; Prisma set up in `packages/db` with the Section 6 schema; first migration; seed script.
   *Accept:* `pnpm db:reset` migrates and seeds; seed prints demo PINs.
 - [ ] **M0-T3** Env validation (zod) in `src/env.ts` for web (public + `API_INTERNAL_URL` only) and api (all secrets); `.env.example`.
   *Accept:* app fails fast with a clear message on missing env.
@@ -1097,6 +1099,12 @@ Prices exclude 18% GST and are stored in the DB (paise), editable from `/admin` 
 | 2026-10-23 | Internal packages (`@restoos/*`) ship TS source, no build step; `apps/server` runs via `tsx` (dev and start), `build` = typecheck | Simplest monorepo setup; production bundling of the server revisited in M14-T5 |
 | 2026-10-23 | **Separate Node.js backend.** `apps/api` (Fastify 5) owns all server-side work: business logic, DB, auth, REST API, Socket.io, BullMQ workers, webhooks, sync. Next.js is frontend-only (no Server Actions, no DB, no API route handlers). Supersedes the 2026-10-21 `apps/server` decision. Same origin via Caddy / Next `rewrites` | Product owner decision: clean separation; one API reusable by a future native app or partners. Fastify chosen for speed, TypeScript + zod support, low boilerplate |
 | 2026-11-09 | API stack: Fastify 5.12 + `fastify-type-provider-zod` 7 (zod 4.6 schemas from `packages/shared` validate requests and serialize responses), `@fastify/swagger` + UI at `/api/docs` (dev only), pino-pretty in dev. No CORS plugin (same origin). `@typescript-eslint/require-await` off (Fastify plugins are async by convention). API tests use a 15s timeout | Typed routes from one schema source; readable dev logs; parallel `pnpm check` exceeded vitest's 5s default on cold Fastify boots |
+| 2026-11-10 | Prisma **7.10** (not the 8.0 RC): `prisma-client` generator → `packages/db/src/generated` (git-ignored, built by turbo `generate`), URL in `prisma.config.ts`, `@prisma/adapter-pg` driver adapter, root `.env` loaded with Node's `process.loadEnvFile()` (no dotenv). `db:reset` = reset + generate + seed (Prisma 7 no longer seeds automatically) | Stable release; Prisma 7 configuration model |
+| 2026-11-10 | `organizationId` on every tenant table including child rows; top-level rows relate to `Organization`, outlet-level rows to `Outlet`, child rows to their parent; `getTenantDb` keeps `organizationId` consistent | Lets the tenant extension (M1-T3) filter any table directly without joins |
+| 2026-11-10 | Local Docker ports **5434** (Postgres) and **6380** (Redis) | This machine already runs a native PostgreSQL 18 service on 5432 and another project's containers on 5433/6379 |
+| 2026-11-10 | Seed uses **fixed demo PINs** (manager 1001, cashier 2001, butlers 3001–3003, kitchen 4001), stored as argon2 hashes; demo tenant created once, plans always upserted | Seed stays idempotent and can print PINs on every run. Dev data only — never seed staging/prod |
+| 2026-11-10 | `pnpm check` runs turbo with `--concurrency=4` | With 16 parallel tasks the API tests were CPU-starved (27s vs 2.4s alone) |
+| 2026-11-10 | Prisma blocks AI agents from destructive commands (`migrate reset`) without the user's explicit consent; Claude must ask every time | Safety guard; agreed for the M0-T2 acceptance run on the local dev DB |
 | | *(add new decisions here)* | |
 
 ## 18. Open questions (resolve before the milestone that needs them)

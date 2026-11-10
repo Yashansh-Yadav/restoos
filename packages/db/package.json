@@ -7,14 +7,26 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "generate": "prisma generate",
+    "migrate": "prisma migrate dev",
+    "reset": "prisma migrate reset --force && prisma generate && prisma db seed",
+    "seed": "prisma db seed",
+    "studio": "prisma studio",
+    "typecheck": "prisma validate && tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@node-rs/argon2": "2.2.2",
+    "@prisma/adapter-pg": "7.10.1",
+    "@prisma/client": "7.10.1"
   },
   "devDependencies": {
     "@restoos/config": "workspace:*",
     "@types/node": "24.19.2",
     "eslint": "9.39.5",
+    "prisma": "7.10.1",
+    "tsx": "4.23.15",
     "typescript": "6.0.3",
     "vitest": "5.0.5"
   }

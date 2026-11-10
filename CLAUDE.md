@@ -13,7 +13,8 @@ Restaurant management PWA for India (POS, KOT, GST billing, QR menu, staff servi
 - `pnpm dev` — web (Next.js :3000) + api (Fastify :4000)
 - `pnpm check` — typecheck + lint + unit/integration tests
 - `pnpm test:e2e` — Playwright
-- `pnpm db:migrate` / `pnpm db:reset` / `pnpm db:studio`
+- `pnpm infra:up` / `pnpm infra:down` — Postgres (localhost:5434) + Redis (localhost:6380) in Docker
+- `pnpm db:migrate` / `pnpm db:reset` / `pnpm db:seed` / `pnpm db:studio` — `db:reset` wipes the DB: always ask the user first (Prisma also blocks it for AI agents without consent)
 
 ## Hard rules
 1. **Money is integer paise. Tax rates are basis points.** Never use floats for money. All GST math lives in `packages/shared/src/gst.ts`.

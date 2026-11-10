@@ -11,9 +11,16 @@
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
     "test": "turbo run test",
-    "check": "turbo run typecheck lint test",
+    "check": "turbo run typecheck lint test --concurrency=4",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "infra:up": "docker compose up -d --wait",
+    "infra:down": "docker compose down",
+    "db:generate": "pnpm --filter @restoos/db generate",
+    "db:migrate": "pnpm --filter @restoos/db migrate",
+    "db:reset": "pnpm --filter @restoos/db reset",
+    "db:seed": "pnpm --filter @restoos/db seed",
+    "db:studio": "pnpm --filter @restoos/db studio"
   },
   "devDependencies": {
     "prettier": "3.9.10",

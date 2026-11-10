@@ -1,0 +1,977 @@
+// RestoOS database schema — source of truth (plan §6.1 is the narrative version).
+// Conventions:
+// - ids are cuid2; money is integer paise (Int); tax rates are basis points (Int, 500 = 5%).
+// - Every tenant-owned row carries organizationId (child rows too) so getTenantDb (M1-T3) can
+//   filter any table directly. Outlet-level rows also carry outletId.
+// - Relations: top-level rows -> Organization, outlet-level rows -> Outlet, child rows -> parent.
+//   organizationId on outlet-level/child rows is a plain indexed column kept consistent by
+//   getTenantDb (it writes ctx.organizationId on create).
+// - Bills, orders, payments and bell attempts are never deleted (onDelete: Restrict).
+// - createdAt/updatedAt everywhere, except append-only ledgers (AuditLog, MessageCredit).
+// - Better Auth adds its own tables in M1-T1; OwnerAccount links to its user id.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────── Tenancy & people ─────────────
+
+model Organization {
+  id        String   @id @default(cuid(2))
+  name      String
+  legalName String
+  gstin     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  outlets          Outlet[]
+  owners           OwnerAccount[]
+  customers        Customer[]
+  platformInvoices PlatformInvoice[]
+  messageCredits   MessageCredit[]
+  auditLogs        AuditLog[]
+}
+
+model OwnerAccount {
+  id             String   @id @default(cuid(2))
+  organizationId String
+  authUserId     String   @unique // Better Auth user id
+  role           OrgRole  @default(OWNER)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId])
+}
+
+model Outlet {
+  id                    String       @id @default(cuid(2))
+  organizationId        String
+  code                  String // short code used in invoice numbers, e.g. "A1"
+  name                  String
+  address               String
+  stateCode             String // GST state code, e.g. "27" (Maharashtra)
+  gstin                 String?
+  fssaiNumber           String?
+  pricesIncludeTax      Boolean      @default(false)
+  serviceChargeBps      Int          @default(0) // 0 = off (must stay optional, plan §5.1)
+  maxCashierDiscountBps Int          @default(1000)
+  bellTimeoutSeconds    Int          @default(30)
+  googleReviewUrl       String?
+  orderingMode          OrderingMode @default(VIEW_ONLY)
+  timezone              String       @default("Asia/Kolkata")
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  employees        Employee[]
+  devices          Device[]
+  shifts           Shift[]
+  sections         Section[]
+  tables           DiningTable[]
+  tableAssignments TableAssignment[]
+  tableSessions    TableSession[]
+  menuCategories   MenuCategory[]
+  menuItems        MenuItem[]
+  addOnGroups      AddOnGroup[]
+  menuImports      MenuImport[]
+  orders           Order[]
+  kots             Kot[]
+  invoiceBlocks    InvoiceBlock[]
+  bills            Bill[]
+  feedback         Feedback[]
+  bellEvents       BellEvent[]
+  subscription     Subscription?
+  licence          Licence?
+  addOnPurchases   AddOnPurchase[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+}
+
+model Employee {
+  id             String    @id @default(cuid(2))
+  organizationId String
+  outletId       String
+  name           String
+  phone          String?
+  role           StaffRole
+  pinHash        String // argon2
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  outlet            Outlet             @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  sessions          StaffSession[]
+  shifts            Shift[]
+  pushSubscriptions PushSubscription[]
+  tableAssignments  TableAssignment[]
+  bellAttempts      BellAttempt[]
+
+  @@index([organizationId, outletId])
+  @@index([outletId, role, isActive])
+}
+
+model Device {
+  id               String    @id @default(cuid(2))
+  organizationId   String
+  outletId         String
+  code             String // "D2" — used in invoice numbers
+  label            String // "Counter tablet"
+  deviceSecretHash String // registration secret, rotatable
+  isStation        Boolean   @default(false) // station mode for the loud bell board
+  lastSeenAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  outlet            Outlet             @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  sessions          StaffSession[]
+  pushSubscriptions PushSubscription[]
+  invoiceBlocks     InvoiceBlock[]
+  bills             Bill[]
+
+  @@unique([outletId, code])
+  @@index([organizationId])
+}
+
+model StaffSession {
+  id             String   @id @default(cuid(2))
+  organizationId String
+  employeeId     String
+  deviceId       String
+  tokenHash      String   @unique
+  expiresAt      DateTime // ~14h, one shift
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  device   Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([deviceId])
+  @@index([organizationId])
+}
+
+model Shift {
+  // who is on duty right now
+  id             String    @id @default(cuid(2))
+  organizationId String
+  outletId       String
+  employeeId     String
+  startedAt      DateTime  @default(now())
+  endedAt        DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  outlet           Outlet            @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  employee         Employee          @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  tableAssignments TableAssignment[]
+
+  @@index([outletId, endedAt])
+  @@index([employeeId, startedAt])
+  @@index([organizationId])
+}
+
+model PushSubscription {
+  id             String    @id @default(cuid(2))
+  organizationId String
+  employeeId     String
+  deviceId       String
+  endpoint       String    @unique
+  p256dh         String
+  auth           String
+  lastOkAt       DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  device   Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([deviceId])
+  @@index([organizationId])
+}
+
+// ───────────── Floor ─────────────
+
+model Section {
+  id             String   @id @default(cuid(2))
+  organizationId String
+  outletId       String
+  name           String
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  outlet Outlet        @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  tables DiningTable[]
+
+  @@index([outletId, sortOrder])
+  @@index([organizationId])
+}
+
+model DiningTable {
+  id             String      @id @default(cuid(2))
+  organizationId String
+  outletId       String
+  sectionId      String
+  label          String // "T12"
+  seats          Int         @default(4)
+  qrToken        String      @unique // random, rotatable
+  status         TableStatus @default(FREE)
+  posX           Int         @default(0) // simple grid layout
+  posY           Int         @default(0)
+  mutedUntil     DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  outlet      Outlet            @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  section     Section           @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+  assignments TableAssignment[]
+  sessions    TableSession[]
+  bellEvents  BellEvent[]
+
+  @@unique([outletId, label])
+  @@index([sectionId])
+  @@index([outletId, status])
+  @@index([organizationId])
+}
+
+model TableAssignment {
+  id             String    @id @default(cuid(2))
+  organizationId String
+  outletId       String
+  tableId        String
+  employeeId     String // butler
+  shiftId        String
+  endedAt        DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  outlet   Outlet      @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  table    DiningTable @relation(fields: [tableId], references: [id], onDelete: Restrict)
+  employee Employee    @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  shift    Shift       @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+
+  @@index([tableId, endedAt])
+  @@index([employeeId])
+  @@index([shiftId])
+  @@index([organizationId])
+}
+
+model TableSession {
+  id             String    @id @default(cuid(2))
+  organizationId String
+  outletId       String
+  tableId        String
+  openedAt       DateTime  @default(now())
+  closedAt       DateTime?
+  guestCount     Int?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  outlet     Outlet      @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  table      DiningTable @relation(fields: [tableId], references: [id], onDelete: Restrict)
+  orders     Order[]
+  bills      Bill[]
+  bellEvents BellEvent[]
+
+  @@index([tableId, closedAt])
+  @@index([outletId, openedAt])
+  @@index([organizationId])
+}
+
+// ───────────── Menu ─────────────
+
+model MenuCategory {
+  id             String   @id @default(cuid(2))
+  organizationId String
+  outletId       String
+  name           String
+  nameHi         String? // Hindi name for the customer menu toggle
+  sortOrder      Int      @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  outlet Outlet     @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  items  MenuItem[]
+
+  @@index([outletId, sortOrder])
+  @@index([organizationId])
+}
+
+model MenuItem {
+  id             String   @id @default(cuid(2))
+  organizationId String
+  outletId       String
+  categoryId     String
+  code           String? // short code for fast staff search
+  name           String
+  nameHi         String?
+  description    String?
+  imageUrl       String?
+  dietType       DietType
+  basePrice      Int // paise
+  taxRateBps     Int
+  hsnSac         String?
+  inStock        Boolean  @default(true)
+  isActive       Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  outlet      Outlet           @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  category    MenuCategory     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  variants    ItemVariant[]
+  addOnGroups ItemAddOnGroup[]
+  orderItems  OrderItem[]
+
+  @@unique([outletId, code])
+  @@index([categoryId, sortOrder])
+  @@index([outletId, isActive])
+  @@index([organizationId])
+}
+
+model ItemVariant {
+  // Half / Full
+  id             String   @id @default(cuid(2))
+  organizationId String
+  itemId         String
+  name           String
+  price          Int // paise
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  item       MenuItem    @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
+
+  @@index([itemId])
+  @@index([organizationId])
+}
+
+model AddOnGroup {
+  id             String   @id @default(cuid(2))
+  organizationId String
+  outletId       String
+  name           String // "Extras"
+  minSelect      Int      @default(0)
+  maxSelect      Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  outlet Outlet           @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  addOns AddOn[]
+  items  ItemAddOnGroup[]
+
+  @@index([outletId])
+  @@index([organizationId])
+}
+
+model AddOn {
+  id             String   @id @default(cuid(2))
+  organizationId String
+  groupId        String
+  name           String
+  price          Int // paise
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  group AddOnGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+  @@index([organizationId])
+}
+
+model ItemAddOnGroup {
+  organizationId String
+  itemId         String
+  groupId        String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  item  MenuItem   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  group AddOnGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([itemId, groupId])
+  @@index([groupId])
+  @@index([organizationId])
+}
+
+model MenuImport {
+  id             String       @id @default(cuid(2))
+  organizationId String
+  outletId       String
+  fileUrl        String
+  status         ImportStatus
+  rowCount       Int
+  errorCount     Int
+  errors         Json // [{ row, column, message }]
+  createdById    String // employee or owner account id
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Restrict)
+
+  @@index([outletId, createdAt])
+  @@index([organizationId])
+}
+
+// ───────────── Orders & kitchen ─────────────
+
+model Order {
+  id             String      @id @default(cuid(2))
+  organizationId String
+  outletId       String
+  tableSessionId String?
+  source         OrderSource
+  status         OrderStatus @default(OPEN)
+  createdById    String? // employee (null for customer self-orders)
+  clientId       String      @unique // idempotency key from device (offline sync)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  outlet       Outlet        @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  tableSession TableSession? @relation(fields: [tableSessionId], references: [id], onDelete: Restrict)
+  items        OrderItem[]
+  kots         Kot[]
+
+  @@index([outletId, createdAt])
+  @@index([outletId, status])
+  @@index([tableSessionId])
+  @@index([organizationId])
+}
+
+model OrderItem {
+  id             String          @id @default(cuid(2))
+  organizationId String
+  orderId        String
+  itemId         String
+  variantId      String?
+  nameSnapshot   String
+  unitPrice      Int // paise, snapshot incl. add-ons
+  taxRateBps     Int // snapshot
+  quantity       Int
+  note           String?
+  status         OrderItemStatus @default(NEW)
+  kotId          String?
+  voidReason     String?
+  voidedById     String?
+  addOns         Json // [{ addOnId, name, price }]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  order   Order        @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  item    MenuItem     @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  variant ItemVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  kot     Kot?         @relation(fields: [kotId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([itemId])
+  @@index([kotId])
+  @@index([organizationId])
+}
+
+model Kot {
+  id             String    @id @default(cuid(2))
+  organizationId String
+  outletId       String
+  orderId        String
+  number         Int // daily running number per outlet
+  station        String    @default("KITCHEN") // future: BAR, etc.
+  printedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  outlet Outlet      @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  order  Order       @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  items  OrderItem[]
+
+  @@index([outletId, createdAt])
+  @@index([orderId])
+  @@index([organizationId])
+}
+
+// ───────────── Billing ─────────────
+
+model InvoiceBlock {
+  id             String   @id @default(cuid(2))
+  organizationId String
+  outletId       String
+  deviceId       String
+  fy             String // "2627"
+  startSeq       Int
+  endSeq         Int
+  nextSeq        Int
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+
+  @@unique([deviceId, fy, startSeq])
+  @@index([outletId, fy])
+  @@index([organizationId])
+}
+
+model Bill {
+  id             String     @id @default(cuid(2))
+  organizationId String
+  outletId       String
+  tableSessionId String?
+  invoiceNumber  String
+  fy             String
+  status         BillStatus @default(UNPAID)
+  subtotal       Int
+  discountTotal  Int
+  taxableTotal   Int
+  cgstTotal      Int
+  sgstTotal      Int
+  igstTotal      Int        @default(0)
+  serviceCharge  Int        @default(0)
+  roundOff       Int // can be negative
+  grandTotal     Int
+  lines          Json // immutable snapshot of computed lines
+  taxBreakup     Json // per-rate breakup for printing
+  customerId     String?
+  createdById    String
+  deviceId       String
+  clientId       String     @unique // idempotency key
+  cancelReason   String?
+  cancelledById  String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  outlet       Outlet        @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  tableSession TableSession? @relation(fields: [tableSessionId], references: [id], onDelete: Restrict)
+  device       Device        @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  customer     Customer?     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  payments     Payment[]
+  feedback     Feedback[]
+
+  @@unique([outletId, invoiceNumber])
+  @@index([outletId, createdAt])
+  @@index([outletId, status])
+  @@index([tableSessionId])
+  @@index([customerId])
+  @@index([organizationId])
+}
+
+model Payment {
+  id             String        @id @default(cuid(2))
+  organizationId String
+  billId         String
+  mode           PaymentMode
+  amount         Int // paise
+  reference      String? // UPI txn id / gateway id
+  status         PaymentStatus @default(SUCCEEDED)
+  recordedById   String?
+  clientId       String?       @unique // idempotency key for offline payments (plan §9, rule 8)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  bill Bill @relation(fields: [billId], references: [id], onDelete: Restrict)
+
+  @@index([billId])
+  @@index([organizationId])
+}
+
+// ───────────── Customers & feedback ─────────────
+
+model Customer {
+  id             String   @id @default(cuid(2))
+  organizationId String
+  phone          String?
+  name           String?
+  email          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  consents     CustomerConsent[]
+  bills        Bill[]
+
+  @@unique([organizationId, phone])
+  @@index([organizationId])
+}
+
+model CustomerConsent {
+  id             String         @id @default(cuid(2))
+  organizationId String
+  customerId     String
+  purpose        ConsentPurpose
+  policyVersion  String
+  grantedAt      DateTime       @default(now())
+  withdrawnAt    DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  @@index([customerId])
+  @@index([organizationId])
+}
+
+model Feedback {
+  id             String    @id @default(cuid(2))
+  organizationId String
+  outletId       String
+  billId         String?
+  rating         Int // 1–5, private
+  comment        String?
+  alertedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  bill   Bill?  @relation(fields: [billId], references: [id], onDelete: Restrict)
+
+  @@index([outletId, createdAt])
+  @@index([billId])
+  @@index([organizationId])
+}
+
+// ───────────── Bell system ─────────────
+
+model BellEvent {
+  id             String     @id @default(cuid(2))
+  organizationId String
+  outletId       String
+  tableId        String
+  tableSessionId String?
+  targetRole     BellTarget
+  status         BellStatus @default(NOTIFYING)
+  level          Int        @default(0)
+  acceptedById   String? // employee
+  rungAt         DateTime   @default(now())
+  acceptedAt     DateTime?
+  doneAt         DateTime?
+  customerThumb  Int? // 1 = thumbs up, -1 = thumbs down
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  outlet       Outlet        @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  table        DiningTable   @relation(fields: [tableId], references: [id], onDelete: Restrict)
+  tableSession TableSession? @relation(fields: [tableSessionId], references: [id], onDelete: Restrict)
+  attempts     BellAttempt[]
+
+  @@index([outletId, rungAt])
+  @@index([tableId, status])
+  @@index([acceptedById])
+  @@index([organizationId])
+}
+
+model BellAttempt {
+  id             String          @id @default(cuid(2))
+  organizationId String
+  bellEventId    String
+  employeeId     String
+  level          Int
+  notifiedAt     DateTime        @default(now())
+  respondedAt    DateTime?
+  outcome        AttemptOutcome?
+  declineReason  DeclineReason?
+  pushDelivered  Boolean? // from the push send result
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  bellEvent BellEvent @relation(fields: [bellEventId], references: [id], onDelete: Restrict)
+  employee  Employee  @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@index([employeeId, notifiedAt])
+  @@index([bellEventId])
+  @@index([organizationId])
+}
+
+// ───────────── SaaS billing & entitlements ─────────────
+// Plan and PlanFeature are global (not tenant data). Prices in paise, excluding GST.
+
+model Plan {
+  id           String   @id @default(cuid(2))
+  key          String   @unique // STARTER | GROWTH | PRO | LIFETIME_GROWTH
+  name         String
+  kind         PlanKind
+  monthlyPrice Int?
+  annualPrice  Int?
+  oneTimePrice Int?
+  amcPrice     Int?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  features      PlanFeature[]
+  subscriptions Subscription[]
+  licences      Licence[]
+}
+
+model PlanFeature {
+  planId     String
+  featureKey String // FeatureKey or LimitKey
+  limitValue Int? // null = boolean feature; -1 = unlimited
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@id([planId, featureKey])
+}
+
+model Subscription {
+  id               String             @id @default(cuid(2))
+  organizationId   String
+  outletId         String             @unique
+  planId           String
+  interval         BillingInterval
+  status           SubscriptionStatus
+  gatewaySubId     String?
+  currentPeriodEnd DateTime
+  trialEndsAt      DateTime?
+  graceEndsAt      DateTime?
+  pendingPlanId    String? // downgrade at period end
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  plan   Plan   @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([planId])
+  @@index([status])
+  @@index([organizationId])
+}
+
+model Licence {
+  id             String        @id @default(cuid(2))
+  organizationId String
+  outletId       String        @unique
+  planId         String
+  purchasedAt    DateTime
+  amcDueDate     DateTime
+  status         LicenceStatus
+  graceEndsAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Restrict)
+  plan   Plan   @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([planId])
+  @@index([status])
+  @@index([organizationId])
+}
+
+model AddOnPurchase {
+  id             String    @id @default(cuid(2))
+  organizationId String
+  outletId       String
+  featureKey     String
+  limitValue     Int?
+  validUntil     DateTime? // null = lifetime (still subject to AMC)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Restrict)
+
+  @@index([outletId])
+  @@index([organizationId])
+}
+
+model PlatformInvoice {
+  // our GST invoices to restaurants
+  id             String   @id @default(cuid(2))
+  organizationId String
+  invoiceNumber  String   @unique
+  amount         Int
+  gstAmount      Int
+  description    String
+  gatewayRef     String?
+  pdfUrl         String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, createdAt])
+}
+
+model MessageCredit {
+  // WhatsApp credit ledger (append-only)
+  id             String   @id @default(cuid(2))
+  organizationId String
+  delta          Int // + purchase, − usage
+  reason         String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, createdAt])
+}
+
+// ───────────── Audit ─────────────
+
+model AuditLog {
+  // append-only
+  id             String   @id @default(cuid(2))
+  organizationId String
+  outletId       String?
+  actorType      String // OWNER | EMPLOYEE | SYSTEM | ADMIN
+  actorId        String?
+  action         String // "bill.cancel", "order.voidItem", ...
+  entity         String
+  entityId       String
+  data           Json?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, createdAt])
+  @@index([entity, entityId])
+}
+
+// ───────────── Enums ─────────────
+
+enum OrgRole {
+  OWNER
+  ADMIN
+}
+
+enum StaffRole {
+  MANAGER
+  CASHIER
+  BUTLER
+  KITCHEN
+}
+
+enum OrderingMode {
+  VIEW_ONLY
+  SELF_ORDER_APPROVAL
+  SELF_ORDER
+}
+
+enum TableStatus {
+  FREE
+  OCCUPIED
+  ORDERED
+  BILL_REQUESTED
+  PAID
+  CLEANING
+}
+
+enum DietType {
+  VEG
+  NON_VEG
+  EGG
+}
+
+enum ImportStatus {
+  VALIDATED
+  COMMITTED
+  FAILED
+}
+
+enum OrderSource {
+  STAFF
+  CUSTOMER
+  AGGREGATOR
+}
+
+enum OrderStatus {
+  PENDING_APPROVAL
+  OPEN
+  BILLED
+  CANCELLED
+}
+
+enum OrderItemStatus {
+  NEW
+  SENT
+  PREPARING
+  READY
+  SERVED
+  VOIDED
+}
+
+enum BillStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+enum PaymentMode {
+  CASH
+  CARD
+  UPI
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum ConsentPurpose {
+  TRANSACTIONAL
+  MARKETING
+}
+
+enum BellTarget {
+  BUTLER
+  CASHIER
+  MANAGER
+}
+
+enum BellStatus {
+  NOTIFYING
+  ACCEPTED
+  DONE
+  CANCELLED
+  UNANSWERED
+}
+
+enum AttemptOutcome {
+  ACCEPTED
+  DECLINED_BUSY
+  MISSED
+  SUPERSEDED
+}
+
+enum DeclineReason {
+  WITH_ANOTHER_TABLE
+  IN_KITCHEN
+  ON_BREAK
+  OTHER
+}
+
+enum PlanKind {
+  SUBSCRIPTION
+  LIFETIME
+}
+
+enum BillingInterval {
+  MONTHLY
+  ANNUAL
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  GRACE
+  CORE_MODE
+  CANCELLED
+}
+
+enum LicenceStatus {
+  ACTIVE
+  AMC_DUE
+  GRACE
+  CORE_MODE
+}
