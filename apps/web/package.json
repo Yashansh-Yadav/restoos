@@ -9,7 +9,8 @@
     "start": "next start --port 3000",
     "typecheck": "next typegen && tsc --noEmit",
     "lint": "eslint .",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@restoos/shared": "workspace:*",
@@ -24,6 +25,7 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@playwright/test": "1.65.0",
     "@restoos/config": "workspace:*",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "24.19.2",

@@ -4,17 +4,21 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts"
   },
   "scripts": {
     "generate": "prisma generate",
     "migrate": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
     "reset": "prisma migrate reset --force && prisma generate && prisma db seed",
     "seed": "prisma db seed",
     "studio": "prisma studio",
     "typecheck": "prisma validate && tsc --noEmit",
     "lint": "eslint .",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "test:unit": "vitest run --project unit",
+    "test:int": "vitest run --project integration"
   },
   "dependencies": {
     "@node-rs/argon2": "2.2.2",
@@ -23,8 +27,11 @@
   },
   "devDependencies": {
     "@restoos/config": "workspace:*",
+    "@restoos/shared": "workspace:*",
     "@types/node": "24.19.2",
+    "@types/pg": "8.23.1",
     "eslint": "9.39.5",
+    "pg": "8.23.1",
     "prisma": "7.10.1",
     "tsx": "4.23.15",
     "typescript": "6.0.3",

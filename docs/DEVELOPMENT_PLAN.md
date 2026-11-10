@@ -880,7 +880,7 @@ Milestones are grouped into phases. Each phase ends in a **demo you can run** an
   *Accept:* `pnpm db:reset` migrates and seeds; seed prints demo PINs.
 - [x] **M0-T3** Env validation (zod) in `src/env.ts` for web (public + `API_INTERNAL_URL` only) and api (all secrets); `.env.example`.
   *Accept:* app fails fast with a clear message on missing env.
-- [ ] **M0-T4** Testing: Vitest (unit + integration against a test DB), Playwright (one smoke test); GitHub Actions CI running `pnpm check` and Playwright.
+- [x] **M0-T4** Testing: Vitest (unit + integration against a test DB), Playwright (one smoke test); GitHub Actions CI running `pnpm check` and Playwright.
 - [ ] **M0-T5** `packages/shared`: `money.ts` (paise helpers, `formatINR`), `gst.ts` (Section 5.1 calculation), zod enums mirroring Prisma enums.
   *Accept:* ≥95% coverage on `gst.ts`, including inclusive vs exclusive pricing, multi-rate bills, proportional bill discount, service charge, and round-off edge cases.
 - [ ] **M0-T6** Sentry wired in web and api; pino structured logging via Fastify's logger (request id on every log line).
@@ -1107,6 +1107,9 @@ Prices exclude 18% GST and are stored in the DB (paise), editable from `/admin` 
 | 2026-11-10 | Prisma blocks AI agents from destructive commands (`migrate reset`) without the user's explicit consent; Claude must ask every time | Safety guard; agreed for the M0-T2 acceptance run on the local dev DB |
 | 2026-11-10 | **Env policy:** one repo-root `.env` (loaded with Node's `process.loadEnvFile()` when the file exists; real env vars win; deployed servers have no file). Validated with zod at startup by `apps/api/src/env.ts` and `apps/web/src/env.ts` via `parseEnv()` from `@restoos/shared/env` (lists every problem, never prints values). Variables are **required only once code uses them**; integration secrets stay optional (format-checked) until their milestone makes them required (e.g. `BETTER_AUTH_SECRET`/Google/OTP in M1-T1) | `pnpm dev` works without fake keys, malformed values still fail fast; secrets never leak into logs |
 | 2026-11-10 | `@restoos/shared/env` is browser-safe; the `.env` file loader is a separate Node-only entry `@restoos/shared/env/node` | Web client code imports shared schemas; `node:fs` must not reach the browser bundle |
+| 2026-11-10 | **Test DB:** separate `restoos_test` database (`TEST_DATABASE_URL`, must contain "test" and differ from `DATABASE_URL`). Vitest globalSetup creates it and runs `prisma migrate deploy` (never `reset`); `resetTestDb()` truncates all tables in `beforeEach`. Integration tests are `*.int.test.ts` in a serial Vitest project; `pnpm check` needs `pnpm infra:up` | Dev data never touched; no Prisma AI-consent prompts during tests; plan §12 "truncate between tests" |
+| 2026-11-10 | **E2E:** `@playwright/test` with the installed Google Chrome (`channel: "chrome"`), desktop + 360px projects; locally 2 workers / 90s timeout against `next dev`, CI 4 workers against `next start` | No browser download; cold `next dev` compiles pages on first hit and timed out with many parallel workers |
+| 2026-11-10 | **CI:** GitHub Actions `ci.yml` — Postgres + Redis services on the same ports as local, `pnpm check` → `pnpm build` → `pnpm test:e2e`, report uploaded on failure. Repo not on GitHub yet; runs on first push | One pipeline mirroring local commands |
 | | *(add new decisions here)* | |
 
 ## 18. Open questions (resolve before the milestone that needs them)

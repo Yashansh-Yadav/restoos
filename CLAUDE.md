@@ -11,8 +11,9 @@ Restaurant management PWA for India (POS, KOT, GST billing, QR menu, staff servi
 
 ## Commands
 - `pnpm dev` — web (Next.js :3000) + api (Fastify :4000)
-- `pnpm check` — typecheck + lint + unit/integration tests
-- `pnpm test:e2e` — Playwright
+- `pnpm check` — typecheck + lint + unit/integration tests (integration tests need `pnpm infra:up`; they use the separate `restoos_test` DB, never the dev DB)
+- `pnpm test:e2e` — Playwright (installed Chrome; desktop + 360px)
+- Integration tests: name them `*.int.test.ts`, use `createTestDb()` / `resetTestDb()` from `@restoos/db/testing`
 - `pnpm infra:up` / `pnpm infra:down` — Postgres (localhost:5434) + Redis (localhost:6380) in Docker
 - `pnpm db:migrate` / `pnpm db:reset` / `pnpm db:seed` / `pnpm db:studio` — `db:reset` wipes the DB: always ask the user first (Prisma also blocks it for AI agents without consent)
 
