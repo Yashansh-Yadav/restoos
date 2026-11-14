@@ -1,2 +1,7 @@
-// @restoos/shared — zod schemas, enums, event types, money/GST utils (M0-T5, M4-T2).
+// @restoos/shared — browser-safe: zod schemas, enums, money/GST utils, API contracts.
+// (Node-only helpers live under @restoos/shared/env/node.)
 export * from "./api";
+export * from "./enums";
+export * from "./gst";
+export * from "./money";
+export * from "./schemas/billing";

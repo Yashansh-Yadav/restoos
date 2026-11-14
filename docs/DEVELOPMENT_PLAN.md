@@ -163,7 +163,7 @@ restoos/
 - Tax rates are **basis points** (`500` = 5%).
 - Each menu item has `taxRateBps` and the outlet has `pricesIncludeTax: boolean`.
 - GST split for intra-state dine-in: **CGST = SGST = rate / 2**. Support IGST in the data model (`taxType`) but MVP defaults to CGST+SGST.
-- Calculation order per bill: line subtotal → item-level discount → bill-level discount (allocated proportionally across lines) → tax per line → **optional service charge** → round-off to nearest rupee as its own line.
+- Calculation order per bill (implemented in `packages/shared/src/gst.ts`, M0-T5): line subtotal → item-level discount → bill-level discount (allocated proportionally across lines, largest-remainder) → taxable value (inclusive prices backed out so taxable + tax = price) → **optional service charge** on the taxable value (allocated to lines by taxable value) → **GST per line on taxable value + service-charge share, at the line's rate** → round-off to nearest rupee (half-up) as its own line. **GST is charged on the service charge** (decision 2026-11-14, common practice — CA to confirm before launch). Rounding: half-up in integer paise per line; CGST = SGST = rate/2 rounded separately so the halves are always equal.
 - **Service charge must be optional**, off by default per outlet, shown as a separate line, and removable at billing time. (Indian consumer guidelines treat compulsory service charges as unfair; confirm current position with a lawyer before launch.)
 - Bill PDF/print must show: legal name, outlet address, **GSTIN**, **FSSAI licence no.**, invoice number, date/time, HSN/SAC, taxable value, CGST/SGST per rate, total, round-off, payment mode(s).
 - All GST rate logic goes in `packages/shared/src/gst.ts` with exhaustive unit tests.
@@ -881,7 +881,7 @@ Milestones are grouped into phases. Each phase ends in a **demo you can run** an
 - [x] **M0-T3** Env validation (zod) in `src/env.ts` for web (public + `API_INTERNAL_URL` only) and api (all secrets); `.env.example`.
   *Accept:* app fails fast with a clear message on missing env.
 - [x] **M0-T4** Testing: Vitest (unit + integration against a test DB), Playwright (one smoke test); GitHub Actions CI running `pnpm check` and Playwright.
-- [ ] **M0-T5** `packages/shared`: `money.ts` (paise helpers, `formatINR`), `gst.ts` (Section 5.1 calculation), zod enums mirroring Prisma enums.
+- [x] **M0-T5** `packages/shared`: `money.ts` (paise helpers, `formatINR`), `gst.ts` (Section 5.1 calculation), zod enums mirroring Prisma enums.
   *Accept:* ≥95% coverage on `gst.ts`, including inclusive vs exclusive pricing, multi-rate bills, proportional bill discount, service charge, and round-off edge cases.
 - [ ] **M0-T6** Sentry wired in web and api; pino structured logging via Fastify's logger (request id on every log line).
 
@@ -1110,6 +1110,10 @@ Prices exclude 18% GST and are stored in the DB (paise), editable from `/admin` 
 | 2026-11-10 | **Test DB:** separate `restoos_test` database (`TEST_DATABASE_URL`, must contain "test" and differ from `DATABASE_URL`). Vitest globalSetup creates it and runs `prisma migrate deploy` (never `reset`); `resetTestDb()` truncates all tables in `beforeEach`. Integration tests are `*.int.test.ts` in a serial Vitest project; `pnpm check` needs `pnpm infra:up` | Dev data never touched; no Prisma AI-consent prompts during tests; plan §12 "truncate between tests" |
 | 2026-11-10 | **E2E:** `@playwright/test` with the installed Google Chrome (`channel: "chrome"`), desktop + 360px projects; locally 2 workers / 90s timeout against `next dev`, CI 4 workers against `next start` | No browser download; cold `next dev` compiles pages on first hit and timed out with many parallel workers |
 | 2026-11-10 | **CI:** GitHub Actions `ci.yml` — Postgres + Redis services on the same ports as local, `pnpm check` → `pnpm build` → `pnpm test:e2e`, report uploaded on failure. Repo not on GitHub yet; runs on first push | One pipeline mirroring local commands |
+| 2026-11-14 | **GST is charged on the service charge**, at the rate of the items it relates to (service charge allocated to lines by taxable value). Service charge stays optional, off by default, removable per bill | Product owner chose common practice; CA to confirm before launch (Section 18) |
+| 2026-11-14 | GST engine conventions: integer paise + bps only; half-up rounding via BigInt (`mulDivRound`); proportional splits via largest remainder (`allocateBy`, exact and deterministic); tax rounded per line, CGST and SGST each on rate/2 (always equal); inclusive prices backed out so taxable + tax = price exactly; `Bill.taxableTotal` = food taxable + service charge; round-off to nearest rupee half-up (−49…+50 paise) | Exact, reproducible bills on server, browser and offline devices |
+| 2026-11-14 | `@vitest/coverage-v8` gate (≥95%, currently 100%) on `gst.ts`/`money.ts` in `@restoos/shared`'s test script; `fast-check` property tests (thousands of random bills per run); zod enums in `@restoos/shared` with a drift test against Prisma enums | Acceptance criterion M0-T5; catches rounding/allocation bugs examples miss |
+| 2026-11-15 | API tests use a 60s timeout (first cold Fastify boot measured up to ~24s under full parallel `pnpm check`) | Avoid false failures from CPU contention; real hangs still fail |
 | | *(add new decisions here)* | |
 
 ## 18. Open questions (resolve before the milestone that needs them)
@@ -1121,6 +1125,7 @@ Prices exclude 18% GST and are stored in the DB (paise), editable from `/admin` 
 - [ ] Payment gateway account + UPI QR approach confirmed (M7, M12)
 - [ ] Printer models used by pilot restaurants (M6)
 - [ ] Legal review: bill format, service charge, privacy notice and consent text under DPDP Act (M7)
+- [ ] **CA to confirm GST treatment** (before M7 / launch): GST on the service charge (implemented: yes, at the item rate), rounding per line vs per rate, and the tax rates used for packaged goods (seed uses 18% water, 28% aerated drinks; compensation cess not modelled). One-file change in `packages/shared/src/gst.ts` if the answer differs
 - [ ] Final product name and domain (before M3 QR printing)
 - [ ] **i18n helper has no task.** CLAUDE.md requires Hindi strings via an i18n helper. Proposal: add M1-T8 "i18n setup" (e.g. `next-intl`, EN + HI message files, locale toggle) before the first customer-facing screen (M5-T6)
 - [ ] Prisma version for M0-T2: npm `latest` is `8.0.0-rc` (release candidate). Proposal: use stable 7.10.x
