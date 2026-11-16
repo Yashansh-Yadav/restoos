@@ -13,7 +13,9 @@ import type { ConsoleOtpProvider } from "./lib/otp/provider";
 import { devRoutes } from "./modules/dev/routes";
 import { healthRoutes } from "./modules/health/routes";
 import { meRoutes } from "./modules/me/routes";
+import { buildModuleDeps } from "./module-deps";
 import { onboardingRoutes } from "./modules/onboarding/routes";
+import { staffRoutes } from "./modules/staff/routes";
 import { registerAuthHandler } from "./plugins/auth";
 import { registerDocs } from "./plugins/docs";
 import { registerErrorHandling, type ServerErrorHook } from "./plugins/errors";
@@ -72,6 +74,10 @@ export async function buildApp(options: BuildAppOptions = {}) {
         const onboarding = createOnboardingService(deps.prisma);
         await api.register(meRoutes({ ...deps, identity }));
         await api.register(onboardingRoutes({ auth: deps.auth, onboarding }));
+
+        // Tenant feature modules (rule 3: getTenantDb + resolveTenant/requirePermission).
+        const moduleDeps = buildModuleDeps(deps);
+        await api.register(staffRoutes(moduleDeps));
         if (deps.devOtp && process.env.NODE_ENV !== "production") {
           await api.register(devRoutes(deps.devOtp));
         }

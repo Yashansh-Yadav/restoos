@@ -68,6 +68,23 @@ export function createTenantResolver({
   };
 }
 
+/** For outlet-level routes: the owner must have picked an outlet (x-outlet-id). */
+export const requireOutlet: preHandlerAsyncHookHandler = async function requireOutlet(
+  request,
+  reply,
+) {
+  if (!tenantOf(request).outletId) {
+    return deny(reply, 400, "OUTLET_REQUIRED", `Choose an outlet (${OUTLET_HEADER} header)`);
+  }
+};
+
+/** The outlet of an outlet-level route (after requireOutlet). */
+export function outletOf(request: FastifyRequest): string {
+  const { outletId } = tenantOf(request);
+  if (!outletId) throw new Error("requireOutlet must run before this handler");
+  return outletId;
+}
+
 export function requirePermission(permission: Permission): preHandlerAsyncHookHandler {
   return async function checkPermission(request, reply) {
     if (!can(tenantOf(request).actor, permission)) {

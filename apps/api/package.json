@@ -17,6 +17,7 @@
     "@better-auth/redis-storage": "1.7.25",
     "@fastify/swagger": "9.9.3",
     "@fastify/swagger-ui": "6.1.3",
+    "@node-rs/argon2": "2.2.2",
     "@restoos/db": "workspace:*",
     "@restoos/shared": "workspace:*",
     "@sentry/node": "11.12.0",

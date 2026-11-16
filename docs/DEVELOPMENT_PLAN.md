@@ -893,7 +893,7 @@ Milestones are grouped into phases. Each phase ends in a **demo you can run** an
   *Accept:* integration test proves an outlet cannot read another org's menu/bills.
 - [x] **M1-T4** Permissions module (Section 5.4) with `can()` + `requirePermission()` helper for actions.
   *Accept:* table-driven test covering every role × permission.
-- [ ] **M1-T5** Employee management in `/owner/staff`: add/edit/deactivate, set role, set/reset PIN.
+- [x] **M1-T5** Employee management in `/owner/staff`: add/edit/deactivate, set role, set/reset PIN.
 - [ ] **M1-T6** Device pairing + staff PIN login (Section 6.3), quick user switch, lockout.
   *Accept:* E2E: pair device → PIN login as butler → sees butler home; wrong PIN ×5 → locked.
 - [ ] **M1-T7** Shifts: staff "Start shift" / "End shift" (auto-start on first login of the day, configurable). Audit log helper `audit(ctx, action, entity, id, data)`.
@@ -1138,6 +1138,13 @@ Prices exclude 18% GST and are stored in the DB (paise), editable from `/admin` 
 | 2026-11-16 | Permissions are shared constants (`packages/shared/src/permissions.ts`: `PERMISSIONS`, `ROLE_PERMISSIONS`); `can(actor, permission, resource?)` in `apps/api/src/lib/permissions.ts` adds resource rules (cashier discount ≤ `outlet.maxCashierDiscountBps`); system actor may do anything. `/api/me` returns the owner's `permissions` | One source for API enforcement and UI hiding |
 | 2026-11-16 | **Request context:** `resolveTenant` preHandler (`plugins/tenant.ts`) turns the owner session into `request.tenant`; owners pick an outlet with the `x-outlet-id` header (checked against their org → 403 `OUTLET_FORBIDDEN`); no OwnerAccount → 403 `ONBOARDING_REQUIRED`. Routes chain `[resolveTenant, requirePermission(p), requireFeature(f)]` (403 `FORBIDDEN` / `FEATURE_NOT_IN_PLAN`). Modules receive these via `buildModuleDeps()` | Staff device sessions plug into the same resolver in M1-T6 |
 | 2026-11-16 | **Entitlement stub** (`lib/entitlements.ts`): outlet's non-cancelled subscription → plan, else licence → plan, else **Growth** until M12-T1/T2; `CORE_MODE` keeps limits but turns paid features off; `POS_CORE`/`OFFLINE` always on (rule 5); unlimited = `Infinity`; no cache yet. Feature/limit keys moved to `packages/shared/src/entitlements.ts`; `seedPlans()` exported from `@restoos/db/testing` | Call sites exist from P1; M12 only replaces resolution + adds the Redis cache |
+| 2026-11-16 | **Staff sign-in = tap your name, then PIN** (M1-T6), so PINs needn't be unique per outlet. PINs are 4–6 digits; all-same-digit and straight runs (1111, 1234, 4321, 123456) are rejected; the form suggests a random strong 4-digit PIN (CSPRNG) the owner can overwrite; the PIN is shown once after saving, stored as argon2, never returned | Faster + safer than PIN-only login; no "PIN taken" errors |
+| 2026-11-16 | **Managers manage only cashiers, butlers and kitchen staff**; only Owner/Admin add, edit, promote to or reset a Manager (403 `FORBIDDEN`) | A manager can't give themselves a peer or lock out another manager |
+| 2026-11-16 | Deactivating a staff member or resetting their PIN **deletes their StaffSessions** (signed out on every device). Staff are never deleted (history stays) | Lost/compromised PINs take effect immediately |
+| 2026-11-16 | `MAX_STAFF` counts **active** staff per outlet; enforced on add and reactivate (403 `STAFF_LIMIT_REACHED`). Concurrent adds can overshoot by one — acceptable until M12-T6 limit enforcement | Plan §15 limits are per outlet |
+| 2026-11-16 | Owner screens are online-only, so their writes don't carry a `clientId` (rule 8 applies to offline-capable staff writes). Staff changes aren't in rule 7's audit list; `audit()` arrives in M1-T7 | Scope rule 8 to what can actually be offline |
+| 2026-11-16 | Web: **TanStack Query** added (`@tanstack/react-query` 5.107.1, `QueryProvider` in the `(owner)` layout); Server Components pass first-render data as `initialData`. API: `@node-rs/argon2` added to `apps/api` (same version as the seed). Services throw `AppError(status, code, message)` (`lib/errors.ts`), rendered by the global error handler | Declared stack; one error path for business rules |
+| 2026-11-16 | Owner outlet selection on web: `?outlet=<id>` if it's one of the owner's outlets, else the first; sent to the API as `x-outlet-id`. A real switcher comes with `MULTI_OUTLET` | Most restaurants have one outlet |
 | | *(add new decisions here)* | |
 
 ## 18. Open questions (resolve before the milestone that needs them)

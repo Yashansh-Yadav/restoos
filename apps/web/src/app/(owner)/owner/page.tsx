@@ -1,4 +1,6 @@
+import { ChevronRight, Users } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getMe } from "@/features/auth/api";
 import { SignOutButton } from "@/features/auth/components/sign-out-button";
@@ -21,7 +23,7 @@ export default async function OwnerPage() {
           {organizationName}
         </h1>
         <p className="text-base text-body">
-          Your restaurant is set up. Menu and billing come next.
+          Your restaurant is set up. Add your team next; menu and billing follow.
         </p>
       </div>
       <section className="flex flex-col gap-3" aria-labelledby="outlets-heading">
@@ -46,6 +48,19 @@ export default async function OwnerPage() {
           ))}
         </ul>
       </section>
+      <nav aria-label="Manage" className="flex flex-col gap-2">
+        <Link
+          href="/owner/staff"
+          className="flex min-h-touch-staff items-center gap-3 rounded-md border border-border px-4 py-3 transition-colors duration-150 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          <Users className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <span className="flex flex-1 flex-col">
+            <span className="text-base font-semibold">Staff</span>
+            <span className="text-sm text-muted-foreground">Add your team and set their PINs</span>
+          </span>
+          <ChevronRight className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+        </Link>
+      </nav>
       <SignOutButton />
     </main>
   );

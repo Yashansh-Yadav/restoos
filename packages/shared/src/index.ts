@@ -10,3 +10,4 @@ export * from "./permissions";
 export * from "./schemas/auth";
 export * from "./schemas/billing";
 export * from "./schemas/onboarding";
+export * from "./schemas/staff";
