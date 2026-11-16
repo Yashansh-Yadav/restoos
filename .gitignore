@@ -23,3 +23,6 @@ test-results/
 # misc
 .DS_Store
 *.log
+
+# Graphify knowledge graph (rebuilt locally from code by git hooks)
+graphify-out/

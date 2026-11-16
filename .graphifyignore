@@ -1,0 +1,16 @@
+# Graphify: code-only graph (tree-sitter AST, no LLM tokens). .gitignore is respected too.
+# Docs/images are excluded on purpose — they would need Claude to extract (costs tokens).
+*.md
+*.png
+*.jpg
+*.svg
+docs/
+.claude/
+.agents/
+.github/
+graphify-out/
+**/src/generated/
+**/.next/
+**/dist/
+**/coverage/
+pnpm-lock.yaml

@@ -16,6 +16,7 @@ Restaurant management PWA for India (POS, KOT, GST billing, QR menu, staff servi
 - Integration tests: name them `*.int.test.ts`, use `createTestDb()` / `resetTestDb()` from `@restoos/db/testing`
 - `pnpm infra:up` / `pnpm infra:down` — Postgres (localhost:5434) + Redis (localhost:6380) in Docker
 - `pnpm db:migrate` / `pnpm db:reset` / `pnpm db:seed` / `pnpm db:studio` — `db:reset` wipes the DB: always ask the user first (Prisma also blocks it for AI agents without consent)
+- **Code graph (Graphify, code-only, no LLM tokens):** `graphify-out/graph.json` is rebuilt by git hooks after each commit (`graphify update .`; config in `.graphifyignore`). For cross-module questions use it before broad searches: `graphify affected "<symbol>"` (impact of a change), `graphify path "A" "B"`, `graphify explain "X"`, `graphify query "<question>"`, then open only the files it points to. CLI: `C:\Users\yasha\AppData\Roaming\Python\Python312\Scripts\graphify.exe`. Never run `/graphify` on docs or `graphify extract` (those spend tokens) unless the user asks.
 
 ## Hard rules
 1. **Money is integer paise. Tax rates are basis points.** Never use floats for money. All GST math lives in `packages/shared/src/gst.ts`.
