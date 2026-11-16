@@ -11,6 +11,7 @@ import type { ConsoleOtpProvider } from "./lib/otp/provider";
 import { devRoutes } from "./modules/dev/routes";
 import { healthRoutes } from "./modules/health/routes";
 import { meRoutes } from "./modules/me/routes";
+import { onboardingRoutes } from "./modules/onboarding/routes";
 import { registerAuthHandler } from "./plugins/auth";
 import { registerDocs } from "./plugins/docs";
 import { registerErrorHandling, type ServerErrorHook } from "./plugins/errors";
@@ -64,6 +65,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
       await api.register(healthRoutes);
       if (deps) {
         await api.register(meRoutes(deps));
+        await api.register(onboardingRoutes(deps));
         if (deps.devOtp && process.env.NODE_ENV !== "production") {
           await api.register(devRoutes(deps.devOtp));
         }

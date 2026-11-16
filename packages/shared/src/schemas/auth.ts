@@ -42,10 +42,18 @@ export const meResponseSchema = z.object({
     image: z.string().nullable(),
     linked: z.object({ google: z.boolean(), phone: z.boolean() }),
   }),
-  owner: z.object({ organizationId: z.string(), role: orgRoleSchema }).nullable(),
+  owner: z
+    .object({
+      organizationId: z.string(),
+      organizationName: z.string(),
+      role: orgRoleSchema,
+      outlets: z.array(z.object({ id: z.string(), name: z.string(), code: z.string() })),
+    })
+    .nullable(),
   needsOnboarding: z.boolean(),
 });
 export type MeResponse = z.infer<typeof meResponseSchema>;
+export type OwnerSummary = NonNullable<MeResponse["owner"]>;
 
 /** GET /api/auth-config — which sign-in methods the login page should offer. */
 export const authConfigSchema = z.object({

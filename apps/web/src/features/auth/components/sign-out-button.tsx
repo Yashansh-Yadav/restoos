@@ -5,12 +5,12 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 
-export function SignOutButton() {
+export function SignOutButton({ variant = "secondary" }: { variant?: "secondary" | "ghost" }) {
   const [busy, setBusy] = useState(false);
   return (
     <Button
       type="button"
-      variant="secondary"
+      variant={variant}
       disabled={busy}
       onClick={() => {
         setBusy(true);

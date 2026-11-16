@@ -170,7 +170,7 @@ restoos/
 
 ### 5.2 Invoice numbering
 - Unique and consecutive **per outlet per financial year (Apr–Mar)**, max 16 characters.
-- Format: `{outletCode}-{FY}-{deviceCode}{seq}` e.g. `A1-2627-D200045` (≤16 chars; validate).
+- Format: `{outletCode}-{FY}-{deviceCode}{seq}` e.g. `A1-2627-D1000045` — exactly 16 chars: outlet code 2 (`[A-Z0-9]{2}`, unique per organisation, fixed once billed), FY 4 (`2627` = Apr 2026–Mar 2027, IST), device code 2, sequence 6 zero-padded (≤ 999,999 bills per device per FY). Helpers: `formatInvoiceNumber()` / `financialYear()` in `packages/shared/src/india.ts`.
 - Each billing device gets a **pre-allocated block** of sequence numbers (e.g. 500) so it can bill offline without collisions. Unused numbers in a returned block are recorded as `CANCELLED`/skipped in the register.
 - Bills are never deleted. Cancellation creates a cancelled status with reason + actor (and a credit note in phase 2).
 
@@ -851,7 +851,7 @@ Milestones are grouped into phases. Each phase ends in a **demo you can run** an
 
 | Phase | Weeks | Milestones | Demo at the end | Resolve before starting |
 |---|---|---|---|---|
-| **P1 Foundation** | 1–2 | M0, M1 | Owner signs up, onboards an outlet, adds staff; butler logs in with PIN on a paired device | OTP provider · service-charge GST treatment · invoice-number format limits (see "Known gaps" below) |
+| **P1 Foundation** | 1–2 | M0, M1 | Owner signs up, onboards an outlet, adds staff; butler logs in with PIN on a paired device | OTP provider · service-charge GST treatment (see "Known gaps" below) |
 | **P2 Menu & floor** | 2–3 | M2, M3 | Import a 30-item menu from Excel; print the QR sheet; assign butlers to tables | Final product name & domain (printed on QR cards) |
 | **P3 Service core** | 3–6 | M4, M5, M6 | Butler takes an order in ≤ budget taps → KOT appears on the kitchen display and prints; customer sees live stock | Pilot printer models |
 | **P4 Billing** ✅ *first usable release* | 6–7 | M7 | Cashier bills a table in 2 taps; GST-correct printed bill with UPI QR; split payment; cancel + reprint | Payment gateway account · WhatsApp BSP · legal review of bill format & consent text |
@@ -888,7 +888,7 @@ Milestones are grouped into phases. Each phase ends in a **demo you can run** an
 ### M1 — Tenancy, auth, roles (week 1–2)
 - [x] **M1-T1** Owner login via **Google OAuth 2.0** and **mobile OTP** only (Better Auth Google provider + phone-number plugin). No email/password, no custom sign-up form: first successful login creates the user, then routes to onboarding (M1-T2). Owner can link Google and phone to one account. OTP sending behind an `OtpProvider` interface with a console adapter for dev; OTP rate-limited (Redis) and expiring.
   *Accept:* E2E: phone OTP login (console adapter) → onboarding; Google login covered by a mocked OAuth callback test; no email/password route exists.
-- [ ] **M1-T2** Onboarding wizard: organization → first outlet (name, address, state, GSTIN, FSSAI, tax inclusive?, invoice code). Max 3 screens.
+- [x] **M1-T2** Onboarding wizard: organization → first outlet (name, address, state, GSTIN, FSSAI, tax inclusive?, invoice code). Max 3 screens.
 - [ ] **M1-T3** `getTenantDb(ctx)` Prisma extension + lint rule banning raw `prisma` imports in `apps/api/src/modules/**` and any `@restoos/db` import in `apps/web`.
   *Accept:* integration test proves an outlet cannot read another org's menu/bills.
 - [ ] **M1-T4** Permissions module (Section 5.4) with `can()` + `requirePermission()` helper for actions.
@@ -1126,6 +1126,10 @@ Prices exclude 18% GST and are stored in the DB (paise), editable from `/admin` 
 | 2026-11-16 | **Separate test DB per package** (`restoos_test` for db, `restoos_test_api` for api) via `prepareTestDatabase(suffix)` / `createTestDb(suffix)`; API tests use Redis logical db 1 | Turbo runs packages in parallel and every suite TRUNCATEs all tables — a shared DB made them block each other (hang) |
 | 2026-11-16 | **E2E always tests a production build** (`next build && next start`) on dedicated ports web 3100 / API 4100, locally and in CI | Cold `next dev` compiles routes on demand + hot reload aborted navigations; separate ports never reuse/disturb `pnpm dev` |
 | 2026-11-16 | Web: `better-auth/react` client (same-origin, no secrets); `(owner)` layout guard via `GET /api/me` (server-side, forwarding cookies; `server-only` helper); full page load after sign-in/out | Frontend-only web (rule 2); nothing cached across an auth change |
+| 2026-11-16 | **Invoice number format** `A1-2627-D1000045` (outlet 2 · FY 4 · device 2 · seq 6 = 16 chars, the GST maximum) | Resolves the "invoice-number format limits" gap; 999,999 bills per device per FY is ample |
+| 2026-11-16 | **Onboarding (M1-T2):** one 3-step form, single `POST /api/onboarding` at the end (org → owner → outlet in one transaction; 409 `ALREADY_ONBOARDED`, unique `authUserId` guards double-submit). Service in `apps/api/src/lib/onboarding.ts` (pre-tenant, like `identity.ts`) | Nothing half-saved; no TenantContext exists before the tenant is created |
+| 2026-11-16 | **GSTIN validated by format + checksum**, and the outlet GSTIN's first two digits must equal the outlet state code (official GST state list incl. 97 = Other Territory). Business GSTIN optional; FSSAI (14 digits) **optional at onboarding**, required on bills before go-live (enforced in M7) | Catch typos early without blocking unregistered/new restaurants from trying the app |
+| 2026-11-16 | No trial/plan created at onboarding yet — added by M12-T2 | Entitlements arrive with plans |
 | | *(add new decisions here)* | |
 
 ## 18. Open questions (resolve before the milestone that needs them)

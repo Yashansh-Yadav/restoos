@@ -19,7 +19,16 @@ export async function getMe(prisma: PrismaClient, user: SessionUser): Promise<Me
     prisma.account.findMany({ where: { userId: user.id }, select: { providerId: true } }),
     prisma.ownerAccount.findUnique({
       where: { authUserId: user.id },
-      select: { organizationId: true, role: true },
+      select: {
+        organizationId: true,
+        role: true,
+        organization: {
+          select: {
+            name: true,
+            outlets: { select: { id: true, name: true, code: true }, orderBy: { createdAt: "asc" } },
+          },
+        },
+      },
     }),
   ]);
 
@@ -35,7 +44,12 @@ export async function getMe(prisma: PrismaClient, user: SessionUser): Promise<Me
         phone: Boolean(user.phoneNumberVerified && user.phoneNumber),
       },
     },
-    owner,
+    owner: owner && {
+      organizationId: owner.organizationId,
+      organizationName: owner.organization.name,
+      role: owner.role,
+      outlets: owner.organization.outlets,
+    },
     needsOnboarding: owner === null,
   };
 }

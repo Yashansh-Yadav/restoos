@@ -4,7 +4,7 @@
 export const DEMO_ORG = {
   name: "Saffron Table",
   legalName: "Saffron Table Hospitality Pvt Ltd",
-  gstin: "27AABCS1234F1Z5", // placeholder format, not a real registration
+  gstin: "27AABCS1234F1ZR", // placeholder (checksum-valid), not a real registration
 } as const;
 
 export const DEMO_OUTLET = {
@@ -12,7 +12,7 @@ export const DEMO_OUTLET = {
   name: "Saffron Table — Bandra",
   address: "12 Hill Road, Bandra West, Mumbai 400050",
   stateCode: "27", // Maharashtra
-  gstin: "27AABCS1234F1Z5",
+  gstin: "27AABCS1234F1ZR",
   fssaiNumber: "11526999000123", // placeholder
   googleReviewUrl: "https://g.page/r/demo-review-link",
 } as const;
