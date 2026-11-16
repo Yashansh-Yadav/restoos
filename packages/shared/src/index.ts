@@ -4,4 +4,5 @@ export * from "./api";
 export * from "./enums";
 export * from "./gst";
 export * from "./money";
+export * from "./schemas/auth";
 export * from "./schemas/billing";

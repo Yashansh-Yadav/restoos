@@ -11,9 +11,10 @@ Restaurant management PWA for India (POS, KOT, GST billing, QR menu, staff servi
 
 ## Commands
 - `pnpm dev` — web (Next.js :3000) + api (Fastify :4000)
-- `pnpm check` — typecheck + lint + unit/integration tests (integration tests need `pnpm infra:up`; they use the separate `restoos_test` DB, never the dev DB)
-- `pnpm test:e2e` — Playwright (installed Chrome; desktop + 360px)
-- Integration tests: name them `*.int.test.ts`, use `createTestDb()` / `resetTestDb()` from `@restoos/db/testing`
+- `pnpm check` — typecheck + lint + unit/integration tests (integration tests need `pnpm infra:up`; they use separate test DBs, never the dev DB)
+- `pnpm test:e2e` — Playwright against a **production build** on ports web 3100 / API 4100 (installed Chrome; desktop + 360px). Doesn't touch `pnpm dev`
+- Integration tests: name them `*.int.test.ts`; each package uses its **own** test DB: `prepareTestDatabase("<pkg>")` in its Vitest globalSetup + `createTestDb("<pkg>")` / `resetTestDb()` from `@restoos/db/testing` (packages run in parallel and truncate tables)
+- Dev login: phone OTP with `OTP_PROVIDER=console` — the code is printed in the API log (and readable at `GET /api/dev/last-otp?phone=+91…` outside production)
 - `pnpm infra:up` / `pnpm infra:down` — Postgres (localhost:5434) + Redis (localhost:6380) in Docker
 - `pnpm db:migrate` / `pnpm db:reset` / `pnpm db:seed` / `pnpm db:studio` — `db:reset` wipes the DB: always ask the user first (Prisma also blocks it for AI agents without consent)
 - **Code graph (Graphify, code-only, no LLM tokens):** `graphify-out/graph.json` is rebuilt by git hooks after each commit (`graphify update .`; config in `.graphifyignore`). For cross-module questions use it before broad searches: `graphify affected "<symbol>"` (impact of a change), `graphify path "A" "B"`, `graphify explain "X"`, `graphify query "<question>"`, then open only the files it points to. CLI: `C:\Users\yasha\AppData\Roaming\Python\Python312\Scripts\graphify.exe`. Never run `/graphify` on docs or `graphify extract` (those spend tokens) unless the user asks.

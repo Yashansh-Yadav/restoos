@@ -46,8 +46,83 @@ model OwnerAccount {
   updatedAt      DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  user         User         @relation(fields: [authUserId], references: [id], onDelete: Restrict)
 
   @@index([organizationId])
+}
+
+// ───────────── Owner auth (Better Auth, M1-T1) ─────────────
+// Shape required by better-auth 1.7 core + phoneNumber plugin (checked with getAuthTables()).
+// Better Auth generates ids itself. Owners sign in with Google or phone OTP only — no passwords:
+// Account.password stays null. Phone-only users get a placeholder email on the reserved
+// `.invalid` domain (never deliverable). Not tenant data: a user becomes an owner via OwnerAccount.
+
+model User {
+  id                  String   @id
+  name                String
+  email               String   @unique
+  emailVerified       Boolean  @default(false)
+  image               String?
+  phoneNumber         String?  @unique
+  phoneNumberVerified Boolean?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @default(now()) @updatedAt
+
+  sessions     Session[]
+  accounts     Account[]
+  ownerAccount OwnerAccount?
+
+  @@map("auth_user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("auth_session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String // "google" | "phone-number" (none use passwords)
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([providerId, accountId])
+  @@map("auth_account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  @@index([identifier])
+  @@map("auth_verification")
 }
 
 model Outlet {

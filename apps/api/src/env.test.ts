@@ -1,12 +1,60 @@
 import { EnvError } from "@restoos/shared/env";
 import { describe, expect, it } from "vitest";
-import { loadApiEnv } from "./env";
+import { DEV_AUTH_SECRET, loadApiEnv } from "./env";
 
 const valid = {
   APP_URL: "http://localhost:3000",
   DATABASE_URL: "postgresql://restoos:restoos@localhost:5434/restoos",
   REDIS_URL: "redis://localhost:6380",
+  BETTER_AUTH_SECRET: DEV_AUTH_SECRET,
 };
+
+const production = {
+  ...valid,
+  NODE_ENV: "production",
+  APP_URL: "https://app.restoos.in",
+  BETTER_AUTH_SECRET: "x".repeat(48),
+  GOOGLE_CLIENT_ID: "id.apps.googleusercontent.com",
+  GOOGLE_CLIENT_SECRET: "secret",
+  OTP_PROVIDER: "msg91",
+  OTP_API_KEY: "key",
+};
+
+describe("api env — auth rules (M1-T1)", () => {
+  it("requires BETTER_AUTH_SECRET everywhere", () => {
+    expect(problemsFor({ ...valid, BETTER_AUTH_SECRET: undefined })).toEqual([
+      "BETTER_AUTH_SECRET: required",
+    ]);
+  });
+
+  it("accepts a correct production config", () => {
+    expect(problemsFor(production)).toEqual([]);
+  });
+
+  it("rejects development shortcuts in production", () => {
+    const problems = problemsFor({
+      ...production,
+      BETTER_AUTH_SECRET: DEV_AUTH_SECRET,
+      OTP_PROVIDER: "console",
+      GOOGLE_CLIENT_ID: undefined,
+      GOOGLE_CLIENT_SECRET: undefined,
+      APP_URL: "http://app.restoos.in",
+    });
+    expect(problems.map((p) => p.split(":")[0]).sort()).toEqual([
+      "APP_URL",
+      "BETTER_AUTH_SECRET",
+      "GOOGLE_CLIENT_ID",
+      "OTP_PROVIDER",
+    ]);
+  });
+
+  it("requires the Google id and secret together, and an API key for real OTP providers", () => {
+    expect(problemsFor({ ...valid, GOOGLE_CLIENT_ID: "only-id" })[0]).toMatch(
+      /^GOOGLE_CLIENT_SECRET:/,
+    );
+    expect(problemsFor({ ...valid, OTP_PROVIDER: "msg91" })[0]).toMatch(/^OTP_API_KEY:/);
+  });
+});
 
 function problemsFor(source: Record<string, string | undefined>): readonly string[] {
   try {

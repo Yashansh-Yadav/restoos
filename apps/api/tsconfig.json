@@ -1,4 +1,4 @@
 {
   "extends": "@restoos/config/tsconfig/node.json",
-  "include": ["src", "vitest.config.ts"]
+  "include": ["src", "test", "vitest.config.ts"]
 }

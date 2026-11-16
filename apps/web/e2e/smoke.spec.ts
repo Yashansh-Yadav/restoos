@@ -3,7 +3,9 @@ import { expect, test } from "@playwright/test";
 // M0-T4 smoke test: the app boots, navigation works, the API is reachable through /api, and the
 // basic mobile rules hold (no sideways scroll, touch targets ≥ 44px — CLAUDE.md rule 12).
 
-test("index lists the four surfaces and opens Owner", async ({ page }) => {
+test("index lists the four surfaces; Owner asks a signed-out visitor to sign in", async ({
+  page,
+}) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1, name: "RestoOS" })).toBeVisible();
 
@@ -13,8 +15,10 @@ test("index lists the four surfaces and opens Owner", async ({ page }) => {
   }
 
   await nav.getByRole("link", { name: /^Owner/ }).click();
-  await expect(page).toHaveURL(/\/owner$/);
-  await expect(page.getByRole("heading", { level: 1, name: "Owner" })).toBeVisible();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Sign In to Your Restaurant" }),
+  ).toBeVisible();
 });
 
 test("the browser reaches the Fastify API through /api", async ({ page }) => {
@@ -25,7 +29,7 @@ test("the browser reaches the Fastify API through /api", async ({ page }) => {
   expect(body).toEqual({ ok: true });
 });
 
-for (const path of ["/", "/owner", "/staff", "/admin", "/t/demo"]) {
+for (const path of ["/", "/login", "/staff", "/admin", "/t/demo"]) {
   test(`${path} fits the screen and keeps touch targets ≥ 44px`, async ({ page }) => {
     await page.goto(path);
 
