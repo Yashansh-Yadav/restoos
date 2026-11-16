@@ -49,8 +49,12 @@ export const apiEnvSchema = z.object({
   MESSAGING_PROVIDER: z.enum(["console"]).default("console"),
   MESSAGING_API_KEY: optional(z.string()),
 
-  // Observability (M0-T6)
+  // Observability (M0-T6) — error tracking is off unless SENTRY_DSN is set
   SENTRY_DSN: optional(url),
+  SENTRY_ENVIRONMENT: optional(
+    z.string().regex(/^[a-z0-9-]{1,32}$/, "lowercase letters, digits, dashes"),
+  ),
+  SENTRY_RELEASE: optional(z.string().max(200)),
 
   // Our own GST invoices (M12-T9)
   PLATFORM_GSTIN: optional(

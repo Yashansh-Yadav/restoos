@@ -12,6 +12,8 @@ export default defineConfig({
   // dev server time out. CI runs the pre-built app, so it can use more workers.
   workers: isCI ? 4 : 2,
   timeout: isCI ? 30_000 : 90_000,
+  // Client-side navigation in `next dev` can exceed the 5s default while pages compile.
+  expect: { timeout: isCI ? 5_000 : 15_000 },
   forbidOnly: isCI,
   retries: isCI ? 1 : 0,
   reporter: isCI

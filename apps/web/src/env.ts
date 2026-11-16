@@ -34,6 +34,8 @@ export function loadWebServerEnv(
 
 export const webClientEnvSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.url().optional(),
+  // Browser + Next server error tracking (M0-T6). Off when unset. A DSN is public by design.
+  NEXT_PUBLIC_SENTRY_DSN: z.url().optional(),
 });
 
 /**
@@ -43,5 +45,6 @@ export const webClientEnvSchema = z.object({
 export function loadWebClientEnv() {
   return parseEnv("@restoos/web (client)", webClientEnvSchema, {
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+    NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
   });
 }

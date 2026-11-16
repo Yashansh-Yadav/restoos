@@ -69,6 +69,20 @@ describe("api env", () => {
     ]);
   });
 
+  it("validates the optional Sentry settings", () => {
+    expect(
+      problemsFor({
+        ...valid,
+        SENTRY_DSN: "https://k@o1.ingest.sentry.io/1",
+        SENTRY_ENVIRONMENT: "staging",
+        SENTRY_RELEASE: "abc123",
+      }),
+    ).toEqual([]);
+    expect(problemsFor({ ...valid, SENTRY_ENVIRONMENT: "Prod Env!" })[0]).toMatch(
+      /^SENTRY_ENVIRONMENT:/,
+    );
+  });
+
   it("rejects an out-of-range PORT", () => {
     expect(problemsFor({ ...valid, PORT: "70000" })[0]).toMatch(/^PORT:/);
   });

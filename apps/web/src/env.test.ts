@@ -1,6 +1,20 @@
-import { EnvError } from "@restoos/shared/env";
+import { EnvError, parseEnv } from "@restoos/shared/env";
 import { describe, expect, it } from "vitest";
-import { loadWebServerEnv } from "./env";
+import { loadWebServerEnv, webClientEnvSchema } from "./env";
+
+describe("web client env", () => {
+  it("accepts an optional Sentry DSN and rejects a malformed one", () => {
+    expect(parseEnv("web", webClientEnvSchema, {})).toEqual({});
+    expect(
+      parseEnv("web", webClientEnvSchema, {
+        NEXT_PUBLIC_SENTRY_DSN: "https://k@o1.ingest.sentry.io/1",
+      }).NEXT_PUBLIC_SENTRY_DSN,
+    ).toBe("https://k@o1.ingest.sentry.io/1");
+    expect(() => parseEnv("web", webClientEnvSchema, { NEXT_PUBLIC_SENTRY_DSN: "nope" })).toThrow(
+      /NEXT_PUBLIC_SENTRY_DSN/,
+    );
+  });
+});
 
 describe("web server env", () => {
   it("falls back to the local API in development", () => {

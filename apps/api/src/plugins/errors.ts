@@ -1,4 +1,4 @@
-import type { FastifyError, FastifyInstance } from "fastify";
+import type { FastifyError, FastifyInstance, FastifyRequest } from "fastify";
 import {
   hasZodFastifySchemaValidationErrors,
   isResponseSerializationError,
@@ -9,11 +9,25 @@ function body(code: string, message: string, details?: unknown): ApiErrorBody {
   return { error: details === undefined ? { code, message } : { code, message, details } };
 }
 
+/** Called for unexpected (5xx) errors only — wired to Sentry by server.ts. */
+export type ServerErrorHook = (err: unknown, req: FastifyRequest) => void;
+
 /**
  * One error shape for every response: `{ error: { code, message, details? } }`.
  * Registered on the root instance (not encapsulated) so it applies to all routes.
+ * 4xx are expected client errors (logged at info by Fastify); 5xx are logged as errors and
+ * reported via `onServerError`. The client never sees internal details, only the request id.
  */
-export function registerErrorHandling(app: FastifyInstance): void {
+export function registerErrorHandling(
+  app: FastifyInstance,
+  { onServerError }: { onServerError?: ServerErrorHook } = {},
+): void {
+  const serverError = (err: unknown, req: FastifyRequest, msg: string) => {
+    req.log.error({ err }, msg);
+    onServerError?.(err, req);
+    return body("INTERNAL_ERROR", "Internal server error");
+  };
+
   app.setNotFoundHandler((req, reply) => {
     void reply.code(404).send(body("NOT_FOUND", `Route ${req.method} ${req.url} not found`));
   });
@@ -26,14 +40,12 @@ export function registerErrorHandling(app: FastifyInstance): void {
     }
 
     if (isResponseSerializationError(err)) {
-      req.log.error({ err }, "response did not match its schema");
-      return reply.code(500).send(body("INTERNAL_ERROR", "Internal server error"));
+      return reply.code(500).send(serverError(err, req, "response did not match its schema"));
     }
 
     const status = err.statusCode ?? 500;
     if (status >= 500) {
-      req.log.error({ err }, "unhandled error");
-      return reply.code(500).send(body("INTERNAL_ERROR", "Internal server error"));
+      return reply.code(500).send(serverError(err, req, "unhandled error"));
     }
 
     return reply.code(status).send(body(err.code || "BAD_REQUEST", err.message));
