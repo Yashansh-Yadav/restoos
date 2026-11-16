@@ -6,6 +6,8 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import type { Auth } from "./lib/auth";
+import { createIdentityService } from "./lib/identity";
+import { createOnboardingService } from "./lib/onboarding";
 import { REQUEST_ID_HEADER, requestIdOptions } from "./lib/logger";
 import type { ConsoleOtpProvider } from "./lib/otp/provider";
 import { devRoutes } from "./modules/dev/routes";
@@ -64,8 +66,12 @@ export async function buildApp(options: BuildAppOptions = {}) {
     async (api) => {
       await api.register(healthRoutes);
       if (deps) {
-        await api.register(meRoutes(deps));
-        await api.register(onboardingRoutes(deps));
+        // The raw client stays here and in lib/: modules get bound services or getTenantDb(ctx)
+        // (rule 3, enforced by lint on src/modules/**).
+        const identity = createIdentityService(deps.prisma);
+        const onboarding = createOnboardingService(deps.prisma);
+        await api.register(meRoutes({ ...deps, identity }));
+        await api.register(onboardingRoutes({ auth: deps.auth, onboarding }));
         if (deps.devOtp && process.env.NODE_ENV !== "production") {
           await api.register(devRoutes(deps.devOtp));
         }

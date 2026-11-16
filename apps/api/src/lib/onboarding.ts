@@ -11,6 +11,18 @@ export class AlreadyOnboardedError extends Error {
   }
 }
 
+/** Bound to the raw client in app.ts, so route modules never hold it (rule 3). */
+export type OnboardingService = {
+  complete(
+    userId: string,
+    input: OnboardingRequest,
+  ): Promise<{ organizationId: string; outletId: string }>;
+};
+
+export function createOnboardingService(prisma: PrismaClient): OnboardingService {
+  return { complete: (userId, input) => completeOnboarding(prisma, userId, input) };
+}
+
 export async function completeOnboarding(
   prisma: PrismaClient,
   userId: string,
@@ -48,7 +60,8 @@ export async function completeOnboarding(
     });
   } catch (err) {
     // Unique violation on OwnerAccount.authUserId = a concurrent submit won the race.
-    if (err instanceof Error && "code" in err && err.code === "P2002") throw new AlreadyOnboardedError();
+    if (err instanceof Error && "code" in err && err.code === "P2002")
+      throw new AlreadyOnboardedError();
     throw err;
   }
 }

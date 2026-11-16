@@ -1,14 +1,13 @@
-import type { PrismaClient } from "@restoos/db";
 import { apiErrorSchema, authConfigSchema, meResponseSchema } from "@restoos/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import type { Auth } from "../../lib/auth";
-import { getMe } from "../../lib/identity";
+import type { IdentityService } from "../../lib/identity";
 import { requireOwnerSession } from "../../plugins/auth";
 
-export type MeRouteDeps = { auth: Auth; prisma: PrismaClient; googleEnabled: boolean };
+export type MeRouteDeps = { auth: Auth; identity: IdentityService; googleEnabled: boolean };
 
 export const meRoutes =
-  ({ auth, prisma, googleEnabled }: MeRouteDeps): FastifyPluginAsyncZod =>
+  ({ auth, identity, googleEnabled }: MeRouteDeps): FastifyPluginAsyncZod =>
   async (app) => {
     app.get(
       "/me",
@@ -22,7 +21,7 @@ export const meRoutes =
       async (request, reply) => {
         const session = await requireOwnerSession(auth, request, reply);
         if (!session) return reply;
-        return getMe(prisma, session.user);
+        return identity.getMe(session.user);
       },
     );
 

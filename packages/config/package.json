@@ -9,6 +9,7 @@
     "./tsconfig/nextjs.json": "./tsconfig/nextjs.json",
     "./eslint/base": "./eslint/base.js",
     "./eslint/next": "./eslint/next.js",
+    "./eslint/restrictions": "./eslint/restrictions.js",
     "./tailwind/theme.css": "./tailwind/theme.css"
   },
   "dependencies": {

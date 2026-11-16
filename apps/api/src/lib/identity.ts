@@ -14,6 +14,13 @@ export type SessionUser = {
   phoneNumberVerified?: boolean | null;
 };
 
+/** Bound to the raw client in app.ts, so route modules never hold it (rule 3). */
+export type IdentityService = { getMe(user: SessionUser): Promise<MeResponse> };
+
+export function createIdentityService(prisma: PrismaClient): IdentityService {
+  return { getMe: (user) => getMe(prisma, user) };
+}
+
 export async function getMe(prisma: PrismaClient, user: SessionUser): Promise<MeResponse> {
   const [accounts, owner] = await Promise.all([
     prisma.account.findMany({ where: { userId: user.id }, select: { providerId: true } }),
@@ -25,7 +32,10 @@ export async function getMe(prisma: PrismaClient, user: SessionUser): Promise<Me
         organization: {
           select: {
             name: true,
-            outlets: { select: { id: true, name: true, code: true }, orderBy: { createdAt: "asc" } },
+            outlets: {
+              select: { id: true, name: true, code: true },
+              orderBy: { createdAt: "asc" },
+            },
           },
         },
       },
