@@ -28,7 +28,13 @@ describe("GSTIN", () => {
   });
 
   it("rejects bad formats", () => {
-    for (const g of ["", "27AAPFU0939F1Z", "27aapfu0939f1zv", "27AAPFU0939F1AV", "XXAAPFU0939F1ZV"]) {
+    for (const g of [
+      "",
+      "27AAPFU0939F1Z",
+      "27aapfu0939f1zv",
+      "27AAPFU0939F1AV",
+      "XXAAPFU0939F1ZV",
+    ]) {
       expect(isValidGstin(g), g).toBe(false);
     }
   });

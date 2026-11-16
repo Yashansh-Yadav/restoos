@@ -13,7 +13,10 @@ const trimmed = (min: number, max: number, label: string) =>
 
 /** Optional field: "" or whitespace counts as not provided. */
 const optionalText = <T extends z.ZodType>(schema: T) =>
-  z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), schema.optional());
+  z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    schema.optional(),
+  );
 
 const gstin = z
   .string()

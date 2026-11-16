@@ -1,4 +1,10 @@
-import { modelScope, type ModelScope, type PrismaClient } from "@restoos/db";
+import {
+  modelScope,
+  type ModelScope,
+  type OrgRole,
+  type PrismaClient,
+  type StaffRole,
+} from "@restoos/db";
 
 // Tenant isolation (plan §5.3, CLAUDE.md rule 3). Feature modules never touch the raw Prisma
 // client: they call getTenantDb(ctx), which adds the tenant to every query so a forgotten
@@ -15,9 +21,10 @@ import { modelScope, type ModelScope, type PrismaClient } from "@restoos/db";
 // - Foreign keys (categoryId, tableId…) are not checked: load referenced rows through the tenant
 //   client first; another tenant's row then comes back as not found.
 
+/** Who is acting. `role` drives permissions (lib/permissions.ts); system jobs have every one. */
 export type Actor =
-  | { kind: "owner"; userId: string }
-  | { kind: "staff"; employeeId: string }
+  | { kind: "owner"; userId: string; role: OrgRole }
+  | { kind: "staff"; employeeId: string; role: StaffRole }
   | { kind: "system"; reason: string };
 
 export type TenantContext = {

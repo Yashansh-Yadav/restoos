@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { orgRoleSchema } from "../enums";
+import { PERMISSIONS } from "../permissions";
 
 // Owner auth contracts (M1-T1), shared by apps/api and apps/web.
 
@@ -47,6 +48,8 @@ export const meResponseSchema = z.object({
       organizationId: z.string(),
       organizationName: z.string(),
       role: orgRoleSchema,
+      /** What this owner may do (plan §5.4) — the web app hides the rest; the API enforces it. */
+      permissions: z.array(z.enum(PERMISSIONS)),
       outlets: z.array(z.object({ id: z.string(), name: z.string(), code: z.string() })),
     })
     .nullable(),

@@ -867,7 +867,7 @@ Milestones are grouped into phases. Each phase ends in a **demo you can run** an
 **Checkpoint after P4:** the product can run a real restaurant online (order → kitchen → bill → pay). Consider a friendly-restaurant dogfood here, before the bell and offline work, to catch workflow problems early.
 
 **Known gaps in phase order** (decide before the phase that hits them):
-1. **Entitlements are built in M12 (P8) but needed from P3** (`CUSTOMER_SELF_ORDER` in M5-T6, `BELL_SYSTEM` in M8, `STAFF_ANALYTICS` in M10-T3). Proposal: add a stub `hasFeature()`/`getLimit()` in P1 (M1-T4) that reads the seeded plan, so call sites exist from day one and M12 only replaces the resolver.
+1. **Entitlements are built in M12 (P8) but needed from P3** (`CUSTOMER_SELF_ORDER` in M5-T6, `BELL_SYSTEM` in M8, `STAFF_ANALYTICS` in M10-T3). Proposal: add a stub `hasFeature()`/`getLimit()` in P1 (M1-T4) that reads the seeded plan, so call sites exist from day one and M12 only replaces the resolver. **Adopted 2026-11-16 (M1-T4).**
 2. **M5-T5 (VOID KOT print) depends on M6 printing**, and **M6-T3 auto-print bill depends on M7 bills.** Proposal: do M5-T5's print part in M6, and the bill half of M6-T3 inside M7-T1.
 3. **Real-time (M4) is in P3, but M2-T4 stock toggle (P2) emits `menu.stockChanged`.** Proposal: M2-T4 calls `publishEvent()` with no Socket.io attached yet (a no-op emitter); M4-T2 attaches Socket.io.
 
@@ -891,7 +891,7 @@ Milestones are grouped into phases. Each phase ends in a **demo you can run** an
 - [x] **M1-T2** Onboarding wizard: organization → first outlet (name, address, state, GSTIN, FSSAI, tax inclusive?, invoice code). Max 3 screens.
 - [x] **M1-T3** `getTenantDb(ctx)` Prisma extension + lint rule banning raw `prisma` imports in `apps/api/src/modules/**` and any `@restoos/db` import in `apps/web`.
   *Accept:* integration test proves an outlet cannot read another org's menu/bills.
-- [ ] **M1-T4** Permissions module (Section 5.4) with `can()` + `requirePermission()` helper for actions.
+- [x] **M1-T4** Permissions module (Section 5.4) with `can()` + `requirePermission()` helper for actions.
   *Accept:* table-driven test covering every role × permission.
 - [ ] **M1-T5** Employee management in `/owner/staff`: add/edit/deactivate, set role, set/reset PIN.
 - [ ] **M1-T6** Device pairing + staff PIN login (Section 6.3), quick user switch, lockout.
@@ -1134,6 +1134,10 @@ Prices exclude 18% GST and are stored in the DB (paise), editable from `/admin` 
 | 2026-11-16 | `getTenantDb` is a factory over the app's client (`createTenantDbFactory(prisma)`), not a module singleton; pre-tenant code (`/me`, onboarding) gets bound `lib/` services from `app.ts`. Modules never see the raw client | Testable with per-package test DBs; lint can ban the client outright in `src/modules/**` |
 | 2026-11-16 | Known limits of the extension: **nested writes are not rewritten** (child rows set `organizationId`, which is required) and **foreign-key ids are not checked** — services load referenced rows through the tenant client first (another tenant's row = not found) | Keeps the extension small and predictable; covered by per-model leak tests (§5.3) |
 | 2026-11-16 | Lint: `no-restricted-imports` (also catches `import type`) bans `PrismaClient`/`createPrismaClient`, `@restoos/db/testing`, `@prisma/*` and generated client paths in `apps/api/src/modules/**` (tests exempt), and `@restoos/db`, `@prisma/*`, `pg`, `ioredis`, auth adapters anywhere in `apps/web`. Rules live in `packages/config/eslint/restrictions.js`, with a test that they fire | Rules 2 and 3 enforced by tooling, not review |
+| 2026-11-16 | **Org `ADMIN` role** = every Owner permission except `billing.manageSubscription` (co-owner/partner) | §5.4 table had no ADMIN column; the schema already had the role |
+| 2026-11-16 | Permissions are shared constants (`packages/shared/src/permissions.ts`: `PERMISSIONS`, `ROLE_PERMISSIONS`); `can(actor, permission, resource?)` in `apps/api/src/lib/permissions.ts` adds resource rules (cashier discount ≤ `outlet.maxCashierDiscountBps`); system actor may do anything. `/api/me` returns the owner's `permissions` | One source for API enforcement and UI hiding |
+| 2026-11-16 | **Request context:** `resolveTenant` preHandler (`plugins/tenant.ts`) turns the owner session into `request.tenant`; owners pick an outlet with the `x-outlet-id` header (checked against their org → 403 `OUTLET_FORBIDDEN`); no OwnerAccount → 403 `ONBOARDING_REQUIRED`. Routes chain `[resolveTenant, requirePermission(p), requireFeature(f)]` (403 `FORBIDDEN` / `FEATURE_NOT_IN_PLAN`). Modules receive these via `buildModuleDeps()` | Staff device sessions plug into the same resolver in M1-T6 |
+| 2026-11-16 | **Entitlement stub** (`lib/entitlements.ts`): outlet's non-cancelled subscription → plan, else licence → plan, else **Growth** until M12-T1/T2; `CORE_MODE` keeps limits but turns paid features off; `POS_CORE`/`OFFLINE` always on (rule 5); unlimited = `Infinity`; no cache yet. Feature/limit keys moved to `packages/shared/src/entitlements.ts`; `seedPlans()` exported from `@restoos/db/testing` | Call sites exist from P1; M12 only replaces resolution + adds the Redis cache |
 | | *(add new decisions here)* | |
 
 ## 18. Open questions (resolve before the milestone that needs them)

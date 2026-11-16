@@ -4,7 +4,8 @@ import { loadRootEnv } from "@restoos/shared/env/node";
 import type { LightMyRequestResponse } from "fastify";
 import { buildApp, type App } from "../app";
 import { DEV_AUTH_SECRET } from "../env";
-import { createAuth } from "../lib/auth";
+import type { PrismaClient } from "@restoos/db";
+import { createAuth, type Auth } from "../lib/auth";
 import { ConsoleOtpProvider } from "../lib/otp/provider";
 import { createRedis } from "../lib/redis";
 
@@ -20,7 +21,13 @@ function testRedisUrl(): string {
   return url.toString();
 }
 
-export async function createAuthHarness(options: { rateLimit?: boolean } = {}) {
+export type HarnessOptions = {
+  rateLimit?: boolean;
+  /** Adds test-only routes before the app starts (e.g. to exercise preHandlers). */
+  setup?: (app: App, deps: { auth: Auth; prisma: PrismaClient }) => void | Promise<void>;
+};
+
+export async function createAuthHarness(options: HarnessOptions = {}) {
   const prisma = createTestDb("api");
   const redis = createRedis(testRedisUrl());
   await resetTestDb(prisma);
@@ -44,6 +51,7 @@ export async function createAuthHarness(options: { rateLimit?: boolean } = {}) {
     docs: false,
     deps: { prisma, auth, appUrl: ORIGIN, googleEnabled: true, devOtp: otp },
   });
+  await options.setup?.(app, { auth, prisma });
 
   /** Cookie jar: keeps whatever Set-Cookie the API returns, like a browser would. */
   const jar = new Map<string, string>();

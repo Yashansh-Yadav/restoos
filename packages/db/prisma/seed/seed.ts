@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { hash } from "@node-rs/argon2";
 import { createPrismaClient, type PrismaClient } from "../../src/index";
 import { ADD_ON_GROUPS, MENU, type AddOnGroupKey } from "./menu";
-import { LIMIT_KEYS, PLANS } from "./plans";
+import { PLANS, upsertPlans } from "./plans";
 import { DEMO_DEVICES, DEMO_ORG, DEMO_OUTLET, DEMO_SECTIONS, DEMO_STAFF } from "./tenant";
 
 const rootEnv = resolve(import.meta.dirname, "../../../../.env");
@@ -17,32 +17,7 @@ if (!databaseUrl) throw new Error("DATABASE_URL is not set (copy .env.example to
 const token = (bytes = 16) => randomBytes(bytes).toString("base64url");
 
 async function seedPlans(db: PrismaClient): Promise<void> {
-  for (const p of PLANS) {
-    const data = {
-      name: p.name,
-      kind: p.kind,
-      monthlyPrice: p.monthlyPrice ?? null,
-      annualPrice: p.annualPrice ?? null,
-      oneTimePrice: p.oneTimePrice ?? null,
-      amcPrice: p.amcPrice ?? null,
-    };
-    const plan = await db.plan.upsert({
-      where: { key: p.key },
-      create: { key: p.key, ...data },
-      update: data,
-    });
-    await db.planFeature.deleteMany({ where: { planId: plan.id } });
-    await db.planFeature.createMany({
-      data: [
-        ...p.features.map((featureKey) => ({ planId: plan.id, featureKey, limitValue: null })),
-        ...LIMIT_KEYS.map((featureKey) => ({
-          planId: plan.id,
-          featureKey,
-          limitValue: p.limits[featureKey],
-        })),
-      ],
-    });
-  }
+  await upsertPlans(db);
   console.log(`✔ ${PLANS.length} plans with features and limits`);
 }
 

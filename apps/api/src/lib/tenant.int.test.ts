@@ -66,7 +66,7 @@ beforeEach(async () => {
   const orgB = await db.organization.create({ data: { name: "B", legalName: "B Pvt Ltd" } });
   a = { orgId: orgA.id, a1: await makeOutlet(orgA.id, "A1"), a2: await makeOutlet(orgA.id, "A2") };
   b = { orgId: orgB.id, b1: await makeOutlet(orgB.id, "B1") };
-  ownerA = { organizationId: a.orgId, actor: { kind: "owner", userId: "u-a" } };
+  ownerA = { organizationId: a.orgId, actor: { kind: "owner", userId: "u-a", role: "OWNER" } };
 });
 
 describe("getTenantDb: reads", () => {

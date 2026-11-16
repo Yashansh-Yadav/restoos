@@ -79,16 +79,27 @@ export const INVOICE_SEQ_DIGITS = 6;
 
 /** Indian financial year (Apr–Mar) as "2627" for 2026-04-01 … 2027-03-31. */
 export function financialYear(date: Date, timeZone = "Asia/Kolkata"): string {
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "numeric" }).formatToParts(date);
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "numeric",
+  }).formatToParts(date);
   const year = Number(parts.find((p) => p.type === "year")?.value);
   const month = Number(parts.find((p) => p.type === "month")?.value);
   const start = month >= 4 ? year : year - 1;
   return `${String(start % 100).padStart(2, "0")}${String((start + 1) % 100).padStart(2, "0")}`;
 }
 
-export function formatInvoiceNumber(outletCode: string, fy: string, deviceCode: string, seq: number): string {
-  if (!OUTLET_INVOICE_CODE.test(outletCode)) throw new RangeError(`bad outlet code "${outletCode}"`);
-  if (!DEVICE_INVOICE_CODE.test(deviceCode)) throw new RangeError(`bad device code "${deviceCode}"`);
+export function formatInvoiceNumber(
+  outletCode: string,
+  fy: string,
+  deviceCode: string,
+  seq: number,
+): string {
+  if (!OUTLET_INVOICE_CODE.test(outletCode))
+    throw new RangeError(`bad outlet code "${outletCode}"`);
+  if (!DEVICE_INVOICE_CODE.test(deviceCode))
+    throw new RangeError(`bad device code "${deviceCode}"`);
   if (!/^\d{4}$/.test(fy)) throw new RangeError(`bad financial year "${fy}"`);
   if (!Number.isInteger(seq) || seq < 1 || seq >= 10 ** INVOICE_SEQ_DIGITS) {
     throw new RangeError(`invoice sequence out of range: ${seq}`);
@@ -98,7 +109,11 @@ export function formatInvoiceNumber(outletCode: string, fy: string, deviceCode: 
 
 /** Suggests a 2-char invoice code from a brand name: "Saffron Table" → "ST", "Annapurna" → "AN". */
 export function suggestOutletCode(name: string): string {
-  const words = name.toUpperCase().replace(/[^A-Z0-9 ]/g, " ").split(/\s+/).filter(Boolean);
+  const words = name
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
   const first = words[0] ?? "";
   const second = words[1] ?? "";
   if (first && second) return `${first.charAt(0)}${second.charAt(0)}`;

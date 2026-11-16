@@ -9,6 +9,9 @@ import { loadRootEnv } from "@restoos/shared/env/node";
 import pg from "pg";
 import { createPrismaClient, type PrismaClient } from "./index";
 
+/** Seeds the real plan catalogue (plan §15) into a test database — for entitlement tests. */
+export { upsertPlans as seedPlans } from "../prisma/seed/plans";
+
 /**
  * Returns the test database URL (TEST_DATABASE_URL, plus `_<suffix>` on the database name) after
  * safety checks: it must be set, must not equal DATABASE_URL, and its name must contain "test" —

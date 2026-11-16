@@ -1,28 +1,46 @@
 // Plans and entitlements — plan §15. Prices in paise, excluding 18% GST; editable later from /admin.
-// Feature/limit keys move to packages/shared with the entitlements module (M12-T1).
+// Feature/limit keys live in packages/shared (entitlements.ts) since M1-T4.
+import {
+  FEATURE_KEYS,
+  LIMIT_KEYS,
+  UNLIMITED,
+  type FeatureKey,
+  type LimitKey,
+} from "@restoos/shared";
 
-export const FEATURE_KEYS = [
-  "POS_CORE",
-  "QR_MENU",
-  "OFFLINE",
-  "BELL_SYSTEM",
-  "STAFF_ANALYTICS",
-  "CUSTOMER_SELF_ORDER",
-  "WHATSAPP_BILLS",
-  "CRM",
-  "REVIEW_FLOW_FULL",
-  "INVENTORY",
-  "AGGREGATORS",
-  "AI_INSIGHTS",
-  "MULTI_OUTLET",
-] as const;
-export type FeatureKey = (typeof FEATURE_KEYS)[number];
+import type { PrismaClient } from "../../src/index";
 
-export const LIMIT_KEYS = ["MAX_STAFF", "MAX_OUTLETS"] as const;
-export type LimitKey = (typeof LIMIT_KEYS)[number];
+export { FEATURE_KEYS, LIMIT_KEYS, UNLIMITED, type FeatureKey, type LimitKey };
 
-/** Stored in PlanFeature.limitValue to mean "no limit". */
-export const UNLIMITED = -1;
+/** Upserts every plan with its features and limits (seed, and tests via @restoos/db/testing). */
+export async function upsertPlans(db: PrismaClient): Promise<void> {
+  for (const p of PLANS) {
+    const data = {
+      name: p.name,
+      kind: p.kind,
+      monthlyPrice: p.monthlyPrice ?? null,
+      annualPrice: p.annualPrice ?? null,
+      oneTimePrice: p.oneTimePrice ?? null,
+      amcPrice: p.amcPrice ?? null,
+    };
+    const plan = await db.plan.upsert({
+      where: { key: p.key },
+      create: { key: p.key, ...data },
+      update: data,
+    });
+    await db.planFeature.deleteMany({ where: { planId: plan.id } });
+    await db.planFeature.createMany({
+      data: [
+        ...p.features.map((featureKey) => ({ planId: plan.id, featureKey, limitValue: null })),
+        ...LIMIT_KEYS.map((featureKey) => ({
+          planId: plan.id,
+          featureKey,
+          limitValue: p.limits[featureKey],
+        })),
+      ],
+    });
+  }
+}
 
 export type PlanSeed = {
   key: string;

@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@restoos/db";
-import type { MeResponse } from "@restoos/shared";
+import { permissionsFor, type MeResponse } from "@restoos/shared";
 import { isPlaceholderEmail } from "./auth";
 
 // Who is signed in (pre-tenant): an authenticated user may not have an organisation yet.
@@ -58,6 +58,7 @@ export async function getMe(prisma: PrismaClient, user: SessionUser): Promise<Me
       organizationId: owner.organizationId,
       organizationName: owner.organization.name,
       role: owner.role,
+      permissions: permissionsFor(owner.role),
       outlets: owner.organization.outlets,
     },
     needsOnboarding: owner === null,
