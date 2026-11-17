@@ -1,7 +1,14 @@
 "use client";
 
 import { formatINR, type MenuItem, type OwnerMenu } from "@restoos/shared";
-import { ChevronRight, FolderTree, ListPlus, Plus, UtensilsCrossed } from "lucide-react";
+import {
+  ChevronRight,
+  FileSpreadsheet,
+  FolderTree,
+  ListPlus,
+  Plus,
+  UtensilsCrossed,
+} from "lucide-react";
 import Image from "next/image";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -11,13 +18,18 @@ import { useMenu } from "../hooks";
 import { AddOnGroupsSheet } from "./addon-groups-sheet";
 import { CategoriesSheet } from "./categories-sheet";
 import { DietMarker } from "./diet-marker";
+import { ExcelSheet } from "./excel-sheet";
 import { ItemSheet } from "./item-sheet";
 
 // /owner/menu (M2-T1): categories (strip on phones, list on wider screens) → items → edit sheet.
 // English for now; owner screens move to the i18n helper when it lands.
 
 type Open =
-  { kind: "item"; item: MenuItem | null } | { kind: "categories" } | { kind: "addons" } | null;
+  | { kind: "item"; item: MenuItem | null }
+  | { kind: "categories" }
+  | { kind: "addons" }
+  | { kind: "excel" }
+  | null;
 
 /** "₹220" or "from ₹140" when the item has sizes. */
 function priceLabel(item: MenuItem): string {
@@ -57,6 +69,10 @@ export function MenuManager({ outletId, initial }: { outletId: string; initial: 
             <ListPlus aria-hidden="true" />
             Add-ons
           </Button>
+          <Button variant="secondary" size="sm" onClick={() => setOpen({ kind: "excel" })}>
+            <FileSpreadsheet aria-hidden="true" />
+            Excel
+          </Button>
           <Button
             size="sm"
             disabled={menu.categories.length === 0}
@@ -74,7 +90,7 @@ export function MenuManager({ outletId, initial }: { outletId: string; initial: 
           <p className="text-base font-semibold">Start with a category</p>
           <p className="max-w-sm text-sm text-pretty text-muted-foreground">
             Group your dishes like on a printed menu — Starters, Mains, Breads, Drinks. Then add
-            items to each. Importing a whole menu from Excel is coming soon.
+            items to each — or fill the Excel template with your whole menu.
           </p>
           <Button onClick={() => setOpen({ kind: "categories" })}>
             <Plus aria-hidden="true" />
@@ -208,6 +224,8 @@ export function MenuManager({ outletId, initial }: { outletId: string; initial: 
             categories={menu.categories}
             onClose={() => setOpen(null)}
           />
+        ) : open?.kind === "excel" ? (
+          <ExcelSheet outletId={outletId} hasItems={menu.items.length > 0} />
         ) : open?.kind === "addons" ? (
           <AddOnGroupsSheet
             outletId={outletId}

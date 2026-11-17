@@ -71,7 +71,10 @@ export function createTenantResolver({
       organizationId: owner.organizationId,
       actor: { kind: "owner", userId: session.user.id, role: owner.role },
     };
-    const outletId = request.headers[OUTLET_HEADER];
+    // Header for API calls; `?outletId=` for plain download links (M2-T2), which can't send
+    // headers. Either way it's checked against the owner's organisation below.
+    const fromQuery = (request.query as { outletId?: unknown } | undefined)?.outletId;
+    const outletId = request.headers[OUTLET_HEADER] ?? fromQuery;
     if (typeof outletId === "string" && outletId !== "") {
       const outlet = await prisma.outlet.count({
         where: { id: outletId, organizationId: owner.organizationId },

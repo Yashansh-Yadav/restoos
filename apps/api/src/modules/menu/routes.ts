@@ -13,13 +13,14 @@ import {
   menuItemSchema,
   ownerMenuSchema,
 } from "@restoos/shared";
-import type { FastifyRequest } from "fastify";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { AppError } from "../../lib/errors";
 import type { ModuleDeps } from "../../module-deps";
-import { tenantOf } from "../../plugins/tenant";
+import { outletOf, tenantOf } from "../../plugins/tenant";
 import * as menu from "./service";
+import { buildMenuWorkbook, menuToRows } from "./template";
 
 // /api/owner/menu — menu editing for the selected outlet (M2-T1). Permission menu.edit.
 
@@ -57,6 +58,52 @@ export const menuRoutes =
         },
       },
       (request) => menu.getMenu(deps(request)),
+    );
+
+    // Excel (M2-T2): the empty template, and the current menu for edit-and-re-import (M2-T3).
+    const xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    const sendWorkbook = async (
+      request: FastifyRequest,
+      reply: FastifyReply,
+      kind: "template" | "export",
+    ) => {
+      const d = deps(request);
+      const outlet = await d.db.outlet.findUnique({
+        where: { id: outletOf(request) },
+        select: { name: true },
+      });
+      const outletName = outlet?.name ?? "";
+      const bytes =
+        kind === "template"
+          ? await buildMenuWorkbook({ outletName })
+          : await buildMenuWorkbook({ outletName, rows: menuToRows(await menu.getMenu(d)) });
+      const name = kind === "template" ? "restoos-menu-template.xlsx" : "restoos-menu.xlsx";
+      return reply
+        .header("content-type", xlsx)
+        .header("content-disposition", `attachment; filename="${name}"`)
+        .header("cache-control", "no-store")
+        .send(bytes);
+    };
+    const download = { querystring: z.object({ outletId: z.string().optional() }) };
+    app.get(
+      "/owner/menu/template.xlsx",
+      {
+        preHandler,
+        schema: { tags: tag, summary: "Excel template with example rows", ...download },
+      },
+      (request, reply) => sendWorkbook(request, reply, "template"),
+    );
+    app.get(
+      "/owner/menu/export.xlsx",
+      {
+        preHandler,
+        schema: {
+          tags: tag,
+          summary: "The current menu as Excel (edit and re-import)",
+          ...download,
+        },
+      },
+      (request, reply) => sendWorkbook(request, reply, "export"),
     );
 
     // Categories

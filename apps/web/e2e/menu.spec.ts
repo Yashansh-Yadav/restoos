@@ -33,6 +33,15 @@ test("owner adds a category and an item with sizes and a photo, edits and hides 
   await page.getByRole("link", { name: /^Menu/ }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Menu" })).toBeVisible();
 
+  // M2-T2: the Excel template downloads as .xlsx.
+  await page.getByRole("button", { name: "Excel" }).click();
+  const [file] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("link", { name: /Download Template/ }).click(),
+  ]);
+  expect(file.suggestedFilename()).toBe("restoos-menu-template.xlsx");
+  await page.keyboard.press("Escape");
+
   // First category.
   await page.getByRole("button", { name: "Add Your First Category" }).click();
   const cats = page.getByRole("dialog", { name: "Categories" });

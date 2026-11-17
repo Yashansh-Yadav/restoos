@@ -900,7 +900,7 @@ Milestones are grouped into phases. Each phase ends in a **demo you can run** an
 
 ### M2 — Menu (week 2–3)
 - [x] **M2-T1** Menu CRUD in `/owner/menu`: categories, items, variants, add-on groups, diet type, GST rate, HSN, item code, image upload (S3, resized).
-- [ ] **M2-T2** Downloadable Excel template (exceljs) with a header row, an example row, data validation dropdowns (diet type, GST rate 0/5/18/40 — `GST_RATES_BPS`) and an instructions sheet.
+- [x] **M2-T2** Downloadable Excel template (exceljs) with a header row, an example row, data validation dropdowns (diet type, GST rate 0/5/18/40 — `GST_RATES_BPS`) and an instructions sheet.
 - [ ] **M2-T3** Excel import: upload → parse → validate every row (zod) → **preview screen** showing new/updated/error rows with row+column messages → commit in one transaction. Upsert by item `code` when present.
   *Accept:* a file with 3 bad rows shows exactly those 3 errors and commits nothing until fixed or the owner chooses "import valid rows only".
 - [ ] **M2-T4** One-tap "Out of stock" toggle (owner, manager, cashier, kitchen) → emits `menu.stockChanged`.
@@ -1160,6 +1160,9 @@ Prices exclude 18% GST and are stored in the DB (paise), editable from `/admin` 
 | 2026-11-17 | **Menu editing rules:** categories and items are **hidden, never deleted** (orders/bills reference items); add-on groups may be deleted (order lines snapshot add-ons). Item edits replace sizes/add-on links only when sent; with sizes, `basePrice` = the smallest size price ("from ₹…"). Item `code` unique per outlet → 409 `CODE_TAKEN` | History stays intact |
 | 2026-11-17 | **`publishEvent()` adopted (closes §17 proposal #3):** typed event map `packages/shared/src/events.ts`; one `EventBus` per app (`app.events`), routes publish after writes (`menu.changed` now); no subscribers until the M2-T5 cache and M4 Socket.io; listener errors are logged, never thrown into the write | Call sites correct from day one |
 | 2026-11-17 | Zod 4 note: `.partial()` keeps field defaults, so update schemas are built from default-free fields (an omitted field must mean "unchanged") | Caught by a test: an edit wiped item sizes |
+| 2026-11-17 | **Excel menu contract** in `packages/shared/src/menu-import.ts` (columns, examples, `parseSizes`/`formatSizes`), shared by the template/export (M2-T2) and importer (M2-T3). Columns: Category, Category (Hindi), Item Name, Item Name (Hindi), Item Code, Type, Price (₹), Sizes (`Half=140, Full=220`), GST %, HSN/SAC, Description, Show on Menu. Dropdowns for Type / GST % / Show on Menu come from a hidden "Lists" sheet; price has a decimal > 0 check; codes/HSN are text cells (leading zeros kept). **Photos and add-ons stay in the app** | One definition, so the file we hand out and the importer can't disagree |
+| 2026-11-17 | `GET /api/owner/menu/template.xlsx` (examples) and **`/export.xlsx` (current menu, codes included)** so owners can edit in Excel and re-import (upsert by code, M2-T3). `resolveTenant` accepts `?outletId=` as well as `x-outlet-id` (download links can't send headers); same org check | Edit-in-Excel round trip for price updates |
+| 2026-11-17 | `exceljs` 4.4.0 in `apps/api` (declared stack choice). Its typings miss `worksheet.dataValidations.add` (augmented locally) and type `xlsx.load` for an old Buffer (`readWorkbook()` passes an ArrayBuffer) | Library gaps, not behaviour changes |
 | | *(add new decisions here)* | |
 
 ## 18. Open questions (resolve before the milestone that needs them)

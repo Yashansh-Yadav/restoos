@@ -15,6 +15,7 @@ import sharp from "sharp";
 import { afterEach, describe, expect, it } from "vitest";
 import { ORIGIN, createAuthHarness } from "../../test/auth-harness";
 import { restaurant } from "../../test/restaurant";
+import { readWorkbook } from "./template";
 
 type Harness = Awaited<ReturnType<typeof createAuthHarness>>;
 let h: Harness;
@@ -240,6 +241,47 @@ describe("/api/owner/menu", () => {
     const cashier = await r.signedInTablet(priya.id, "4827");
     const denied = await cashier.call("POST", "/api/owner/menu/categories", { name: "Nope" });
     expect([denied.statusCode, code(denied)]).toEqual([403, "FORBIDDEN"]);
+  });
+
+  it("downloads the Excel template and the current menu (M2-T2)", async () => {
+    const { r, api, category } = await setup();
+    const mains = await category("Mains");
+    await api("POST", "/items", paneer(mains.id));
+
+    const template = await api("GET", "/template.xlsx");
+    expect(template.statusCode).toBe(200);
+    expect(template.headers["content-type"]).toContain("spreadsheetml.sheet");
+    expect(template.headers["content-disposition"]).toBe(
+      'attachment; filename="restoos-menu-template.xlsx"',
+    );
+    const blank = await readWorkbook(template.rawPayload);
+    expect(blank.getWorksheet("Menu")?.getCell("C2").text).toBe("Paneer Tikka"); // example row
+
+    // Plain links can't send headers: ?outletId= works too (checked against the org).
+    const exported = await h.app.inject({
+      method: "GET",
+      url: `/api/owner/menu/export.xlsx?outletId=${r.outletId}`,
+      headers: { cookie: [...h.jar].map(([k, v]) => `${k}=${v}`).join("; ") },
+    });
+    expect(exported.statusCode).toBe(200);
+    const wb = await readWorkbook(exported.rawPayload);
+    const sheet = wb.getWorksheet("Menu");
+    expect(sheet?.rowCount).toBe(2);
+    expect([
+      sheet?.getCell("A2").text,
+      sheet?.getCell("E2").text,
+      sheet?.getCell("H2").text,
+    ]).toEqual(["Mains", "PT1", "Half=140, Full=220"]);
+    expect(String(wb.getWorksheet("Instructions")?.getCell("A2").text)).toContain("Bandra");
+  });
+
+  it("downloads need menu.edit and an outlet", async () => {
+    const { r } = await setup();
+    const noOutlet = await h.request("GET", "/api/owner/menu/template.xlsx");
+    expect([noOutlet.statusCode, code(noOutlet)]).toEqual([400, "OUTLET_REQUIRED"]);
+    const priya = await r.addStaff("Priya", "CASHIER", "4827");
+    const cashier = await r.signedInTablet(priya.id, "4827");
+    expect((await cashier.call("GET", "/api/owner/menu/template.xlsx")).statusCode).toBe(403);
   });
 
   it("publishes menu.changed after each write", async () => {
