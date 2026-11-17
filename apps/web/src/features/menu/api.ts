@@ -1,5 +1,7 @@
 import {
   addOnGroupSchema,
+  importPreviewSchema,
+  importResultSchema,
   menuCategorySchema,
   menuItemSchema,
   ownerMenuSchema,
@@ -66,3 +68,16 @@ export const updateAddOnGroup = (outletId: string, groupId: string, body: AddOnG
   );
 export const deleteAddOnGroup = (outletId: string, groupId: string) =>
   apiFetch(`/api/owner/menu/addon-groups/${id(groupId)}`, z.undefined(), opts(outletId, "DELETE"));
+
+// Excel import (M2-T3)
+export function uploadMenuImport(outletId: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  return apiFetch("/api/owner/menu/import", importPreviewSchema, opts(outletId, "POST", form));
+}
+export const commitMenuImport = (outletId: string, importId: string, mode: "all" | "validOnly") =>
+  apiFetch(
+    `/api/owner/menu/import/${id(importId)}/commit`,
+    importResultSchema,
+    opts(outletId, "POST", { mode }),
+  );

@@ -181,3 +181,60 @@ export const ownerMenuSchema = z.object({
   addOnGroups: z.array(addOnGroupSchema),
 });
 export type OwnerMenu = z.infer<typeof ownerMenuSchema>;
+
+// ── Excel import (M2-T3) ────────────────────────────────────────────────────
+
+export const IMPORT_MAX_ROWS = 1000;
+export const IMPORT_MAX_BYTES = 5 * 1024 * 1024;
+
+export const importRowStatusSchema = z.enum(["new", "update", "unchanged", "error"]);
+export type ImportRowStatus = z.infer<typeof importRowStatusSchema>;
+
+export const importMessageSchema = z.object({
+  /** Header of the column, e.g. "GST %"; null for whole-row problems. */
+  column: z.string().nullable(),
+  message: z.string(),
+});
+
+export const importPreviewRowSchema = z.object({
+  /** Excel row number (header is row 1). */
+  row: z.number().int(),
+  status: importRowStatusSchema,
+  name: z.string(),
+  category: z.string(),
+  /** "₹220" or "from ₹140" — for the preview list. */
+  price: z.string(),
+  /** For updates: what will change, e.g. ["Price", "GST %"]. */
+  changes: z.array(z.string()),
+  messages: z.array(importMessageSchema),
+});
+export type ImportPreviewRow = z.infer<typeof importPreviewRowSchema>;
+
+export const importPreviewSchema = z.object({
+  importId: z.string(),
+  committed: z.boolean(),
+  counts: z.object({
+    rows: z.number().int(),
+    new: z.number().int(),
+    update: z.number().int(),
+    unchanged: z.number().int(),
+    error: z.number().int(),
+  }),
+  newCategories: z.array(z.string()),
+  rows: z.array(importPreviewRowSchema),
+});
+export type ImportPreview = z.infer<typeof importPreviewSchema>;
+
+export const importCommitSchema = z.object({
+  /** all = refuse while any row has a problem; validOnly = skip the problem rows. */
+  mode: z.enum(["all", "validOnly"]),
+});
+
+export const importResultSchema = z.object({
+  added: z.number().int(),
+  updated: z.number().int(),
+  unchanged: z.number().int(),
+  skipped: z.number().int(),
+  categoriesAdded: z.number().int(),
+});
+export type ImportResult = z.infer<typeof importResultSchema>;

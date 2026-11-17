@@ -3,6 +3,9 @@ import {
   addOnGroupInputSchema,
   addOnGroupSchema,
   apiErrorSchema,
+  importCommitSchema,
+  importPreviewSchema,
+  importResultSchema,
   categoryInputSchema,
   categoryOrderSchema,
   categoryUpdateSchema,
@@ -104,6 +107,63 @@ export const menuRoutes =
         },
       },
       (request, reply) => sendWorkbook(request, reply, "export"),
+    );
+
+    // Excel import (M2-T3): upload → preview → commit.
+    app.post(
+      "/owner/menu/import",
+      {
+        preHandler,
+        schema: {
+          tags: tag,
+          summary:
+            "Upload a filled menu sheet (multipart `file`, .xlsx ≤ 5 MB) and get the preview",
+          response: { 201: importPreviewSchema, ...errors },
+        },
+      },
+      async (request, reply) => {
+        const file = await request.file();
+        if (!file) throw new AppError(400, "IMPORT_FILE", "Choose the Excel file to upload.");
+        let bytes: Buffer;
+        try {
+          bytes = await file.toBuffer();
+        } catch {
+          throw new AppError(
+            400,
+            "IMPORT_FILE",
+            "The file is bigger than 5 MB. Split the menu into smaller files.",
+          );
+        }
+        return reply.code(201).send(await menu.uploadImport(deps(request), bytes));
+      },
+    );
+    app.get(
+      "/owner/menu/import/:id",
+      {
+        preHandler,
+        schema: {
+          tags: tag,
+          summary: "The preview of an uploaded sheet (re-checked against the current menu)",
+          params: idParams,
+          response: { 200: importPreviewSchema, ...errors, 410: apiErrorSchema },
+        },
+      },
+      (request) => menu.getImportPreview(deps(request), request.params.id),
+    );
+    app.post(
+      "/owner/menu/import/:id/commit",
+      {
+        preHandler,
+        schema: {
+          tags: tag,
+          summary:
+            "Import it (one transaction). mode=all refuses while rows have problems; validOnly skips them",
+          params: idParams,
+          body: importCommitSchema,
+          response: { 200: importResultSchema, ...errors, 410: apiErrorSchema },
+        },
+      },
+      (request) => menu.commitImport(deps(request), request.params.id, request.body.mode),
     );
 
     // Categories

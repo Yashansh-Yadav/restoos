@@ -10,14 +10,23 @@ export type FileStorage = {
   delete(key: string): Promise<void>;
   /** URL the browser loads (same origin for local files). */
   publicUrl(key: string): string;
-  /** Local driver only: read for GET /api/files/*. */
-  read?(key: string): Promise<{ bytes: Buffer; contentType: string } | null>;
+  /** The stored bytes (menu imports re-read their file; local files are served from it). */
+  read(key: string): Promise<{ bytes: Buffer; contentType: string } | null>;
+  /** True when GET /api/files/* should serve this driver's files (local disk only). */
+  servesFiles: boolean;
 };
 
 /** Keys are `a-z0-9-_/.` paths without `..`, so they can't escape the storage root. */
 export const SAFE_KEY = /^(?!.*\.\.)[a-z0-9][a-z0-9/_.-]{0,200}$/i;
 
-const TYPES: Record<string, string> = { ".webp": "image/webp", ".pdf": "application/pdf" };
+const TYPES: Record<string, string> = {
+  ".webp": "image/webp",
+  ".pdf": "application/pdf",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+};
+
+/** Key prefixes anyone with the URL may load (menu photos). Uploaded imports stay private. */
+export const PUBLIC_PREFIXES = ["menu/"];
 
 export const FILES_PREFIX = "/api/files/";
 
@@ -39,6 +48,7 @@ export function createLocalDiskStorage(root: string): FileStorage {
       await rm(pathFor(key), { force: true });
     },
     publicUrl: (key) => `${FILES_PREFIX}${key}`,
+    servesFiles: true,
     async read(key) {
       if (!SAFE_KEY.test(key)) return null;
       try {

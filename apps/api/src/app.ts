@@ -112,7 +112,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
         await api.register(deviceAuthRoutes(moduleDeps));
         await api.register(outletSettingsRoutes(moduleDeps));
         await api.register(menuRoutes(moduleDeps));
-        if (deps.storage.read) await api.register(fileRoutes(deps.storage));
+        if (deps.storage.servesFiles) await api.register(fileRoutes(deps.storage));
         if (deps.devOtp && process.env.NODE_ENV !== "production") {
           await api.register(devRoutes(deps.devOtp));
         }

@@ -1,5 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type {
+  ImportPreview,
+  ImportResult,
   addOnGroupInputSchema,
   categoryInputSchema,
   categoryUpdateSchema,
@@ -13,6 +15,7 @@ import { AppError, notFound } from "../../lib/errors";
 import type { EventBus } from "../../lib/events";
 import { processMenuImage } from "../../lib/images";
 import { keyFromPublicUrl, type FileStorage } from "../../lib/storage";
+import { applyImport, planImport, readMenuSheet } from "./import";
 import type { TenantContext, TenantDb } from "../../lib/tenant";
 
 // Menu editing (M2-T1). Everything goes through the tenant client, so ids from another
@@ -328,4 +331,106 @@ export async function removeItemImage(deps: MenuDeps, id: string): Promise<MenuI
   if (old) await storage.delete(old);
   changed(deps);
   return toItem(row);
+}
+
+// ── Excel import (M2-T3) ────────────────────────────────────────────────────
+
+const actorId = (ctx: TenantContext) =>
+  ctx.actor.kind === "owner"
+    ? ctx.actor.userId
+    : ctx.actor.kind === "staff"
+      ? ctx.actor.employeeId
+      : "system";
+
+async function planFromFile(deps: MenuDeps, bytes: Buffer) {
+  const sheet = await readMenuSheet(bytes);
+  if (!sheet.ok) throw new AppError(400, "IMPORT_FILE", sheet.error);
+  return planImport(sheet.rows, await getMenu(deps));
+}
+
+/** Upload: store the file, record the import, return the preview. Nothing on the menu changes. */
+export async function uploadImport(deps: MenuDeps, bytes: Buffer): Promise<ImportPreview> {
+  const { db, ctx, storage } = deps;
+  const outlet = outletId(ctx);
+  const plan = await planFromFile(deps, bytes);
+  // Private key (not under a public prefix): /api/files never serves imports.
+  const key = `imports/${outlet}/${randomBytes(12).toString("hex")}.xlsx`;
+  await storage.put(
+    key,
+    bytes,
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  );
+  const errors = plan.preview.rows.flatMap((r) =>
+    r.messages.map((m) => ({ row: r.row, column: m.column, message: m.message })),
+  );
+  const record = await db.menuImport.create({
+    data: {
+      organizationId: ctx.organizationId,
+      outletId: outlet,
+      fileUrl: key,
+      status: "VALIDATED",
+      rowCount: plan.preview.counts.rows,
+      errorCount: plan.preview.counts.error,
+      errors,
+      createdById: actorId(ctx),
+    },
+    select: { id: true },
+  });
+  return { importId: record.id, committed: false, ...plan.preview };
+}
+
+async function findImport(deps: MenuDeps, id: string) {
+  const record = await deps.db.menuImport.findUnique({
+    where: { id },
+    select: { id: true, fileUrl: true, status: true },
+  });
+  if (!record) throw notFound("Import");
+  const file = await deps.storage.read(record.fileUrl);
+  if (!file)
+    throw new AppError(
+      410,
+      "IMPORT_EXPIRED",
+      "This upload is no longer available. Upload the file again.",
+    );
+  return { record, bytes: file.bytes };
+}
+
+/** Preview again (e.g. after a reload): re-checked against the menu as it is now. */
+export async function getImportPreview(deps: MenuDeps, id: string): Promise<ImportPreview> {
+  const { record, bytes } = await findImport(deps, id);
+  const plan = await planFromFile(deps, bytes);
+  return { importId: record.id, committed: record.status === "COMMITTED", ...plan.preview };
+}
+
+/**
+ * Commit: re-validates the stored file against the current menu, then writes everything in one
+ * transaction. `all` refuses while any row has a problem; `validOnly` skips those rows.
+ */
+export async function commitImport(
+  deps: MenuDeps,
+  id: string,
+  mode: "all" | "validOnly",
+): Promise<ImportResult> {
+  const { record, bytes } = await findImport(deps, id);
+  if (record.status === "COMMITTED") {
+    throw new AppError(
+      409,
+      "ALREADY_IMPORTED",
+      "This file was already imported. Upload it again to re-import.",
+    );
+  }
+  const plan = await planFromFile(deps, bytes);
+  const { error } = plan.preview.counts;
+  if (mode === "all" && error > 0) {
+    throw new AppError(
+      400,
+      "IMPORT_HAS_ERRORS",
+      `${error} ${error === 1 ? "row has a problem" : "rows have problems"}. Fix them, or import the valid rows only.`,
+      { errorCount: error },
+    );
+  }
+  const result = await applyImport(deps.db, deps.ctx, outletId(deps.ctx), plan);
+  await deps.db.menuImport.update({ where: { id }, data: { status: "COMMITTED" } });
+  changed(deps);
+  return result;
 }

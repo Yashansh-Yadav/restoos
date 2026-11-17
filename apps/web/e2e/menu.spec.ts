@@ -40,6 +40,7 @@ test("owner adds a category and an item with sizes and a photo, edits and hides 
     page.getByRole("link", { name: /Download Template/ }).click(),
   ]);
   expect(file.suggestedFilename()).toBe("restoos-menu-template.xlsx");
+
   await page.keyboard.press("Escape");
 
   // First category.
@@ -85,4 +86,35 @@ test("owner adds a category and an item with sizes and a photo, edits and hides 
   await page.getByRole("button", { name: "Hide from Menu" }).click();
   await page.getByRole("button", { name: "Hide Paneer Tikka" }).click();
   await expect(page.getByRole("button", { name: /Paneer Tikka/ })).toContainText("Hidden");
+});
+
+test("owner imports a menu from the Excel template (preview, then import)", async ({
+  page,
+  request,
+}) => {
+  await signInWithPhone(page, request, randomMobile());
+  await expect(page).toHaveURL(/\/onboarding$/);
+  await onboard(page);
+  await page.getByRole("link", { name: /^Menu/ }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Menu" })).toBeVisible();
+
+  // Download the template, then upload it unchanged: its 3 example rows are valid new items.
+  await page.getByRole("button", { name: "Excel" }).click();
+  const [file] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("link", { name: /Download Template/ }).click(),
+  ]);
+  await page.locator('input[type="file"]').setInputFiles(await file.path());
+
+  const check = page.getByRole("dialog", { name: "Check Your Sheet" });
+  await expect(check).toContainText("3 rows: 3 new", { timeout: 30_000 });
+  await expect(check).toContainText("Paneer Tikka");
+  // Nothing is saved yet.
+  await check.getByRole("button", { name: "Import 3 Items" }).click();
+
+  const done = page.getByRole("dialog", { name: "Menu Imported" });
+  await expect(done).toContainText("3 items added", { timeout: 30_000 });
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: /Paneer Tikka/ })).toContainText("from ₹140");
+  await expect(page.getByRole("button", { name: /^Drinks/ })).toBeVisible();
 });

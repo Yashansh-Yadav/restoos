@@ -21,19 +21,19 @@ describe("local disk storage", () => {
     const s = createLocalDiskStorage(dir);
     await s.put("menu/o1/item-abc.webp", Buffer.from("hello"), "image/webp");
     expect(s.publicUrl("menu/o1/item-abc.webp")).toBe("/api/files/menu/o1/item-abc.webp");
-    expect(await s.read?.("menu/o1/item-abc.webp")).toEqual({
+    expect(await s.read("menu/o1/item-abc.webp")).toEqual({
       bytes: Buffer.from("hello"),
       contentType: "image/webp",
     });
     await s.delete("menu/o1/item-abc.webp");
-    expect(await s.read?.("menu/o1/item-abc.webp")).toBeNull();
+    expect(await s.read("menu/o1/item-abc.webp")).toBeNull();
   });
 
   it("refuses keys that could escape the storage folder", async () => {
     const s = createLocalDiskStorage(await mkdtemp(join(tmpdir(), "restoos-storage-")));
     await expect(s.put("../evil.webp", Buffer.from("x"), "image/webp")).rejects.toThrow();
     await expect(s.put("/etc/passwd", Buffer.from("x"), "text/plain")).rejects.toThrow();
-    expect(await s.read?.("../../package.json")).toBeNull();
+    expect(await s.read("../../package.json")).toBeNull();
     expect(keyFromPublicUrl("/api/files/menu/../x.webp")).toBeNull();
     expect(keyFromPublicUrl("https://evil.example/x.webp")).toBeNull();
     expect(keyFromPublicUrl("/api/files/menu/o1/a.webp")).toBe("menu/o1/a.webp");
