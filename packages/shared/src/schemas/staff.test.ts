@@ -1,6 +1,12 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { createEmployeeSchema, isWeakPin, pinSchema, suggestPin, updateEmployeeSchema } from "./staff";
+import {
+  createEmployeeSchema,
+  isWeakPin,
+  pinSchema,
+  suggestPin,
+  updateEmployeeSchema,
+} from "./staff";
 
 describe("PIN rules", () => {
   it.each(["1111", "0000", "1234", "4321", "123456", "987654", "12345", "999999"])(

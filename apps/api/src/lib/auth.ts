@@ -41,7 +41,8 @@ export type AuthDeps = {
   env: Pick<
     ApiEnv,
     "APP_URL" | "BETTER_AUTH_SECRET" | "GOOGLE_CLIENT_ID" | "GOOGLE_CLIENT_SECRET" | "NODE_ENV"
-  >;
+  > &
+    Partial<Pick<ApiEnv, "OTP_SENDS_PER_IP_PER_MINUTE">>;
   otp: OtpProvider;
   /** Better Auth's per-IP limits. Off in most tests so they can sign in repeatedly. */
   rateLimit?: boolean;
@@ -126,8 +127,8 @@ export function createAuth({ prisma, redis, env, otp, rateLimit = true }: AuthDe
       // Per IP. Kept moderate because Indian mobile carriers put many users behind shared
       // (CGNAT) IPs; the per-phone throttle in hooks.before is what protects the SMS bill.
       customRules: {
-        "/phone-number/send-otp": { window: 60, max: 10 },
-        "/phone-number/verify": { window: 60, max: 20 },
+        "/phone-number/send-otp": { window: 60, max: env.OTP_SENDS_PER_IP_PER_MINUTE ?? 10 },
+        "/phone-number/verify": { window: 60, max: 2 * (env.OTP_SENDS_PER_IP_PER_MINUTE ?? 10) },
       },
     },
     advanced: {

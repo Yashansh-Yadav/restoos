@@ -40,7 +40,9 @@ export default defineConfig({
       // Same API code; its public origin (Better Auth baseURL / allowed origin) is the E2E web port.
       command: "pnpm --filter @restoos/api start",
       url: `${API_URL}/api/health`,
-      env: { PORT: String(API_PORT), APP_URL: WEB_URL },
+      // Every test signs in by OTP from the same machine IP, so allow more sends per IP than the
+      // production default (10/min); the per-phone throttles still apply.
+      env: { PORT: String(API_PORT), APP_URL: WEB_URL, OTP_SENDS_PER_IP_PER_MINUTE: "100" },
       reuseExistingServer: !isCI,
       timeout: 120_000,
     },

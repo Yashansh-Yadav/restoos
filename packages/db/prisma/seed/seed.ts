@@ -65,7 +65,13 @@ async function seedDemoTenant(db: PrismaClient): Promise<void> {
       }
 
       await tx.employee.createMany({
-        data: staff.map((s) => ({ ...scope, name: s.name, role: s.role, pinHash: s.pinHash })),
+        data: staff.map((s) => ({
+          ...scope,
+          name: s.name,
+          role: s.role,
+          pinHash: s.pinHash,
+          pinLength: s.pin.length,
+        })),
       });
       await tx.device.createMany({
         data: devices.map((d) => ({

@@ -5,12 +5,14 @@ import type { FastifyReply, FastifyRequest, preHandlerAsyncHookHandler } from "f
 import type { Auth } from "../lib/auth";
 import type { Entitlements } from "../lib/entitlements";
 import { can } from "../lib/permissions";
+import { DEVICE_COOKIE, STAFF_COOKIE, type StaffAuth } from "../lib/staff-auth";
 import type { TenantContext } from "../lib/tenant";
 
 // Request authorisation (M1-T4). Every tenant route chains these preHandlers:
 //   preHandler: [resolveTenant, requirePermission("staff.manage"), requireFeature("BELL_SYSTEM")]
-// resolveTenant turns the session into request.tenant (a TenantContext for getTenantDb);
-// the others reject with the shared error shape. Staff (device + PIN) sessions join in M1-T6.
+// resolveTenant turns the owner session — or else a staff PIN session on its paired device
+// (M1-T6) — into request.tenant (a TenantContext for getTenantDb); the others reject with the
+// shared error shape.
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -34,13 +36,28 @@ export function tenantOf(request: FastifyRequest): TenantContext {
 export function createTenantResolver({
   auth,
   prisma,
+  staffAuth,
 }: {
   auth: Auth;
   prisma: PrismaClient;
+  staffAuth: StaffAuth;
 }): preHandlerAsyncHookHandler {
   return async function resolveTenant(request, reply) {
     const session = await auth.api.getSession({ headers: fromNodeHeaders(request.headers) });
-    if (!session) return deny(reply, 401, "UNAUTHENTICATED", "Sign in to continue");
+    if (!session) {
+      // Staff: PIN session on its paired device (M1-T6). Outlet = the employee's outlet.
+      const staff = await staffAuth.resolve(
+        request.cookies[DEVICE_COOKIE],
+        request.cookies[STAFF_COOKIE],
+      );
+      if (!staff) return deny(reply, 401, "UNAUTHENTICATED", "Sign in to continue");
+      request.tenant = {
+        organizationId: staff.device.organizationId,
+        outletId: staff.device.outletId,
+        actor: { kind: "staff", employeeId: staff.employee.id, role: staff.employee.role },
+      };
+      return;
+    }
 
     const owner = await prisma.ownerAccount.findUnique({
       where: { authUserId: session.user.id },

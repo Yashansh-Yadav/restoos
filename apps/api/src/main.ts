@@ -31,6 +31,7 @@ export async function start(env: ApiEnv): Promise<void> {
       reportError(err, { requestId: req.id, method: req.method, route: req.routeOptions.url }),
     deps: {
       prisma,
+      redis,
       auth,
       appUrl: env.APP_URL,
       googleEnabled: Boolean(env.GOOGLE_CLIENT_ID),

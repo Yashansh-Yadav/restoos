@@ -29,6 +29,8 @@ const apiEnvObject = z.object({
   GOOGLE_CLIENT_SECRET: optional(z.string()),
   OTP_PROVIDER: z.enum(["console", "msg91"]).default("console"),
   OTP_API_KEY: optional(z.string()),
+  /** Per-IP OTP sends per minute (CGNAT-friendly; per-phone throttles still apply). E2E raises it. */
+  OTP_SENDS_PER_IP_PER_MINUTE: z.coerce.number().int().min(1).max(1000).default(10),
 
   // Web Push (M8-T1)
   VAPID_PUBLIC_KEY: optional(z.string()),

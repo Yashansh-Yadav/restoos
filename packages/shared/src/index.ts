@@ -9,5 +9,6 @@ export * from "./money";
 export * from "./permissions";
 export * from "./schemas/auth";
 export * from "./schemas/billing";
+export * from "./schemas/device";
 export * from "./schemas/onboarding";
 export * from "./schemas/staff";

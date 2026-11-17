@@ -83,6 +83,7 @@ export async function createEmployee(
       phone: input.phone ?? null,
       role: input.role,
       pinHash: await hash(input.pin),
+      pinLength: input.pin.length,
     },
     select,
   });
@@ -117,6 +118,9 @@ export async function setPin(deps: StaffDeps, id: string, pin: string): Promise<
   const current = await deps.db.employee.findUnique({ where: { id }, select: { role: true } });
   if (!current) throw notFound("Staff member");
   assertCanManage(deps.ctx, current.role);
-  await deps.db.employee.update({ where: { id }, data: { pinHash: await hash(pin) } });
+  await deps.db.employee.update({
+    where: { id },
+    data: { pinHash: await hash(pin), pinLength: pin.length },
+  });
   await revokeSessions(deps.db, id);
 }

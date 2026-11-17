@@ -1,4 +1,4 @@
-import { ChevronRight, Users } from "lucide-react";
+import { ChevronRight, MonitorSmartphone, Users } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -57,6 +57,19 @@ export default async function OwnerPage() {
           <span className="flex flex-1 flex-col">
             <span className="text-base font-semibold">Staff</span>
             <span className="text-sm text-muted-foreground">Add your team and set their PINs</span>
+          </span>
+          <ChevronRight className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+        </Link>
+        <Link
+          href="/owner/devices"
+          className="flex min-h-touch-staff items-center gap-3 rounded-md border border-border px-4 py-3 transition-colors duration-150 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          <MonitorSmartphone className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <span className="flex flex-1 flex-col">
+            <span className="text-base font-semibold">Devices</span>
+            <span className="text-sm text-muted-foreground">
+              Pair the tablets and phones staff sign in on
+            </span>
           </span>
           <ChevronRight className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
         </Link>

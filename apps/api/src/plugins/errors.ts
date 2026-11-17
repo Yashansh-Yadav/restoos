@@ -4,6 +4,7 @@ import {
   isResponseSerializationError,
 } from "fastify-type-provider-zod";
 import type { ApiErrorBody } from "@restoos/shared";
+import { AppError } from "../lib/errors";
 
 function body(code: string, message: string, details?: unknown): ApiErrorBody {
   return { error: details === undefined ? { code, message } : { code, message, details } };
@@ -48,6 +49,7 @@ export function registerErrorHandling(
       return reply.code(500).send(serverError(err, req, "unhandled error"));
     }
 
-    return reply.code(status).send(body(err.code || "BAD_REQUEST", err.message));
+    const details = err instanceof AppError ? err.details : undefined;
+    return reply.code(status).send(body(err.code || "BAD_REQUEST", err.message, details));
   });
 }

@@ -894,7 +894,7 @@ Milestones are grouped into phases. Each phase ends in a **demo you can run** an
 - [x] **M1-T4** Permissions module (Section 5.4) with `can()` + `requirePermission()` helper for actions.
   *Accept:* table-driven test covering every role × permission.
 - [x] **M1-T5** Employee management in `/owner/staff`: add/edit/deactivate, set role, set/reset PIN.
-- [ ] **M1-T6** Device pairing + staff PIN login (Section 6.3), quick user switch, lockout.
+- [x] **M1-T6** Device pairing + staff PIN login (Section 6.3), quick user switch, lockout.
   *Accept:* E2E: pair device → PIN login as butler → sees butler home; wrong PIN ×5 → locked.
 - [ ] **M1-T7** Shifts: staff "Start shift" / "End shift" (auto-start on first login of the day, configurable). Audit log helper `audit(ctx, action, entity, id, data)`.
 
@@ -1145,6 +1145,11 @@ Prices exclude 18% GST and are stored in the DB (paise), editable from `/admin` 
 | 2026-11-16 | Owner screens are online-only, so their writes don't carry a `clientId` (rule 8 applies to offline-capable staff writes). Staff changes aren't in rule 7's audit list; `audit()` arrives in M1-T7 | Scope rule 8 to what can actually be offline |
 | 2026-11-16 | Web: **TanStack Query** added (`@tanstack/react-query` 5.107.1, `QueryProvider` in the `(owner)` layout); Server Components pass first-render data as `initialData`. API: `@node-rs/argon2` added to `apps/api` (same version as the seed). Services throw `AppError(status, code, message)` (`lib/errors.ts`), rendered by the global error handler | Declared stack; one error path for business rules |
 | 2026-11-16 | Owner outlet selection on web: `?outlet=<id>` if it's one of the owner's outlets, else the first; sent to the API as `x-outlet-id`. A real switcher comes with `MULTI_OUTLET` | Most restaurants have one outlet |
+| 2026-11-16 | **Device pairing:** the owner/manager registers a device (`/owner/devices`, permission `staff.manage` — §5.4 has no device permission) and gets a one-time **8-digit code, valid 10 min**, stored only in Redis as SHA-256 (`pair:code:*`); a new code revokes the previous one; `/api/device/pair` is limited to 10 tries/min per IP. Redeeming sets the `restoos_device` cookie (`<deviceId>.<secret>`, httpOnly, SameSite=Lax, Secure on https, 1 year); only SHA-256(secret) is stored (`Device.deviceSecretHash`), rotated on every pairing so a device works in one browser only. Unpair stores an unusable hash and ends the device's sessions; devices are never deleted (bills reference them). Device invoice codes are allocated D1…D9, E1…, per outlet | Plan §6.3; high-entropy secrets need no slow hash |
+| 2026-11-16 | **Staff sessions:** name tile + PIN (argon2 verify) → `StaffSession` token cookie `restoos_staff` (SHA-256 stored), **14 h**, valid only together with the same device's cookie. `resolveTenant` accepts it when there's no owner session (outlet = the device's outlet). "Switch User" ends the session; the device stays paired. `Employee.pinLength` (migration `employee_pin_length`) lets the pad sign in on the last digit (1 tap + PIN) | Quick shared-counter switching within the click budget |
+| 2026-11-16 | **PIN lockout per device:** 5 wrong PINs in 5 minutes → 429 `PIN_LOCKED` with `retryAfterSeconds` (Redis counter); a wrong employee id counts as a wrong PIN; success clears the counter; lockouts are logged (`staff.pin_locked`) until `audit()` lands in M1-T7 | Plan §6.3 #4 |
+| 2026-11-16 | Deferred to M4: an owner on a paired device acting as staff (§6.3 #5) — needs a UI switch on the first staff feature screens | Not needed until staff screens exist |
+| 2026-11-16 | `@fastify/cookie` 11.1.5 added to `apps/api` (cookie parsing/setting for device + staff sessions); `AppError` carries optional client-safe `details` | Official Fastify plugin; lock countdowns need data |
 | | *(add new decisions here)* | |
 
 ## 18. Open questions (resolve before the milestone that needs them)

@@ -1,3 +1,4 @@
+import fastifyCookie from "@fastify/cookie";
 import type { PrismaClient } from "@restoos/db";
 import Fastify, { type FastifyServerOptions } from "fastify";
 import {
@@ -10,8 +11,11 @@ import { createIdentityService } from "./lib/identity";
 import { createOnboardingService } from "./lib/onboarding";
 import { REQUEST_ID_HEADER, requestIdOptions } from "./lib/logger";
 import type { ConsoleOtpProvider } from "./lib/otp/provider";
+import type { Redis } from "./lib/redis";
 import { devRoutes } from "./modules/dev/routes";
 import { healthRoutes } from "./modules/health/routes";
+import { deviceAuthRoutes } from "./modules/device-auth/routes";
+import { deviceRoutes } from "./modules/devices/routes";
 import { meRoutes } from "./modules/me/routes";
 import { buildModuleDeps } from "./module-deps";
 import { onboardingRoutes } from "./modules/onboarding/routes";
@@ -23,6 +27,7 @@ import { registerErrorHandling, type ServerErrorHook } from "./plugins/errors";
 /** Runtime dependencies. Omitted in DB-free unit tests, so auth routes aren't registered there. */
 export type AppDeps = {
   prisma: PrismaClient;
+  redis: Redis;
   auth: Auth;
   /** Public web origin (APP_URL) — Better Auth runs on it via the same-origin /api proxy. */
   appUrl: string;
@@ -56,6 +61,9 @@ export async function buildApp(options: BuildAppOptions = {}) {
     void reply.header(REQUEST_ID_HEADER, req.id);
   });
 
+  // Device + staff session cookies (M1-T6). Better Auth parses its own.
+  await app.register(fastifyCookie);
+
   if (options.docs ?? process.env.NODE_ENV !== "production") {
     await registerDocs(app);
   }
@@ -76,8 +84,13 @@ export async function buildApp(options: BuildAppOptions = {}) {
         await api.register(onboardingRoutes({ auth: deps.auth, onboarding }));
 
         // Tenant feature modules (rule 3: getTenantDb + resolveTenant/requirePermission).
-        const moduleDeps = buildModuleDeps(deps);
+        const moduleDeps = buildModuleDeps({
+          ...deps,
+          log: (event, data) => app.log.warn({ event, ...data }, event),
+        });
         await api.register(staffRoutes(moduleDeps));
+        await api.register(deviceRoutes(moduleDeps));
+        await api.register(deviceAuthRoutes(moduleDeps));
         if (deps.devOtp && process.env.NODE_ENV !== "production") {
           await api.register(devRoutes(deps.devOtp));
         }

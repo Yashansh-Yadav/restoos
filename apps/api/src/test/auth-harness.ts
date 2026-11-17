@@ -7,7 +7,7 @@ import { DEV_AUTH_SECRET } from "../env";
 import type { PrismaClient } from "@restoos/db";
 import { createAuth, type Auth } from "../lib/auth";
 import { ConsoleOtpProvider } from "../lib/otp/provider";
-import { createRedis } from "../lib/redis";
+import { createRedis, type Redis } from "../lib/redis";
 
 loadRootEnv();
 
@@ -24,7 +24,10 @@ function testRedisUrl(): string {
 export type HarnessOptions = {
   rateLimit?: boolean;
   /** Adds test-only routes before the app starts (e.g. to exercise preHandlers). */
-  setup?: (app: App, deps: { auth: Auth; prisma: PrismaClient }) => void | Promise<void>;
+  setup?: (
+    app: App,
+    deps: { auth: Auth; prisma: PrismaClient; redis: Redis },
+  ) => void | Promise<void>;
 };
 
 export async function createAuthHarness(options: HarnessOptions = {}) {
@@ -49,9 +52,9 @@ export async function createAuthHarness(options: HarnessOptions = {}) {
   });
   const app: App = await buildApp({
     docs: false,
-    deps: { prisma, auth, appUrl: ORIGIN, googleEnabled: true, devOtp: otp },
+    deps: { prisma, redis, auth, appUrl: ORIGIN, googleEnabled: true, devOtp: otp },
   });
-  await options.setup?.(app, { auth, prisma });
+  await options.setup?.(app, { auth, prisma, redis });
 
   /** Cookie jar: keeps whatever Set-Cookie the API returns, like a browser would. */
   const jar = new Map<string, string>();

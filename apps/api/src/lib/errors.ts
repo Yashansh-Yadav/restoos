@@ -1,11 +1,13 @@
 // Expected business errors. Services throw these; the global error handler (plugins/errors.ts)
-// turns statusCode + code + message into the shared `{ error: { code, message } }` body.
+// turns statusCode + code + message (+ details) into the shared `{ error: { … } }` body.
 
 export class AppError extends Error {
   constructor(
     readonly statusCode: number,
     readonly code: string,
     message: string,
+    /** Safe, client-facing extras (e.g. seconds until a lock lifts). */
+    readonly details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = "AppError";

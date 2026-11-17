@@ -178,6 +178,7 @@ model Employee {
   phone          String?
   role           StaffRole
   pinHash        String // argon2
+  pinLength      Int       @default(4) // 4–6: lets the PIN pad submit on the last digit (M1-T6)
   isActive       Boolean   @default(true)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
