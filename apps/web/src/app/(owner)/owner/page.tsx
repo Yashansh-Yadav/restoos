@@ -1,4 +1,4 @@
-import { ChevronRight, MonitorSmartphone, Users } from "lucide-react";
+import { ChevronRight, MonitorSmartphone, Users, UtensilsCrossed } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -23,7 +23,7 @@ export default async function OwnerPage() {
           {organizationName}
         </h1>
         <p className="text-base text-body">
-          Your restaurant is set up. Add your team next; menu and billing follow.
+          Your restaurant is set up. Set up your menu and team; billing comes next.
         </p>
       </div>
       <section className="flex flex-col gap-3" aria-labelledby="outlets-heading">
@@ -49,6 +49,17 @@ export default async function OwnerPage() {
         </ul>
       </section>
       <nav aria-label="Manage" className="flex flex-col gap-2">
+        <Link
+          href="/owner/menu"
+          className="flex min-h-touch-staff items-center gap-3 rounded-md border border-border px-4 py-3 transition-colors duration-150 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          <UtensilsCrossed className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <span className="flex flex-1 flex-col">
+            <span className="text-base font-semibold">Menu</span>
+            <span className="text-sm text-muted-foreground">Dishes, prices, GST and photos</span>
+          </span>
+          <ChevronRight className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+        </Link>
         <Link
           href="/owner/staff"
           className="flex min-h-touch-staff items-center gap-3 rounded-md border border-border px-4 py-3 transition-colors duration-150 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"

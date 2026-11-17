@@ -18,6 +18,10 @@ const production = {
   GOOGLE_CLIENT_SECRET: "secret",
   OTP_PROVIDER: "msg91",
   OTP_API_KEY: "key",
+  STORAGE_DRIVER: "s3",
+  S3_BUCKET: "restoos-prod",
+  S3_ACCESS_KEY_ID: "AKIA",
+  S3_SECRET_ACCESS_KEY: "secret",
 };
 
 describe("api env — auth rules (M1-T1)", () => {
@@ -39,12 +43,14 @@ describe("api env — auth rules (M1-T1)", () => {
       GOOGLE_CLIENT_ID: undefined,
       GOOGLE_CLIENT_SECRET: undefined,
       APP_URL: "http://app.restoos.in",
+      STORAGE_DRIVER: "local",
     });
     expect(problems.map((p) => p.split(":")[0]).sort()).toEqual([
       "APP_URL",
       "BETTER_AUTH_SECRET",
       "GOOGLE_CLIENT_ID",
       "OTP_PROVIDER",
+      "STORAGE_DRIVER",
     ]);
   });
 
@@ -53,6 +59,14 @@ describe("api env — auth rules (M1-T1)", () => {
       /^GOOGLE_CLIENT_SECRET:/,
     );
     expect(problemsFor({ ...valid, OTP_PROVIDER: "msg91" })[0]).toMatch(/^OTP_API_KEY:/);
+  });
+
+  it("needs bucket and keys when storing files on S3 (M2-T1)", () => {
+    expect(problemsFor({ ...valid, STORAGE_DRIVER: "s3" }).map((p) => p.split(":")[0])).toEqual([
+      "S3_BUCKET",
+      "S3_ACCESS_KEY_ID",
+      "S3_SECRET_ACCESS_KEY",
+    ]);
   });
 });
 

@@ -7,15 +7,19 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import type { Auth } from "./lib/auth";
+import { createEventBus, type EventBus } from "./lib/events";
 import { createIdentityService } from "./lib/identity";
 import { createOnboardingService } from "./lib/onboarding";
 import { REQUEST_ID_HEADER, requestIdOptions } from "./lib/logger";
 import type { ConsoleOtpProvider } from "./lib/otp/provider";
 import type { Redis } from "./lib/redis";
+import type { FileStorage } from "./lib/storage";
 import { devRoutes } from "./modules/dev/routes";
+import { fileRoutes } from "./modules/files/routes";
 import { healthRoutes } from "./modules/health/routes";
 import { deviceAuthRoutes } from "./modules/device-auth/routes";
 import { deviceRoutes } from "./modules/devices/routes";
+import { menuRoutes } from "./modules/menu/routes";
 import { meRoutes } from "./modules/me/routes";
 import { buildModuleDeps } from "./module-deps";
 import { onboardingRoutes } from "./modules/onboarding/routes";
@@ -29,6 +33,8 @@ import { registerErrorHandling, type ServerErrorHook } from "./plugins/errors";
 export type AppDeps = {
   prisma: PrismaClient;
   redis: Redis;
+  /** File storage (local disk in dev/tests, S3 in production). */
+  storage: FileStorage;
   auth: Auth;
   /** Public web origin (APP_URL) — Better Auth runs on it via the same-origin /api proxy. */
   appUrl: string;
@@ -46,6 +52,13 @@ export type BuildAppOptions = {
   deps?: AppDeps;
 };
 
+declare module "fastify" {
+  interface FastifyInstance {
+    /** publishEvent()/subscribe for this app — M4 attaches Socket.io here. */
+    events: EventBus;
+  }
+}
+
 /** Builds the API without listening — shared by server.ts, worker.ts and tests (app.inject). */
 export async function buildApp(options: BuildAppOptions = {}) {
   const app = Fastify({
@@ -61,6 +74,10 @@ export async function buildApp(options: BuildAppOptions = {}) {
   app.addHook("onRequest", async (req, reply) => {
     void reply.header(REQUEST_ID_HEADER, req.id);
   });
+
+  // One event bus per app: routes publish after writes; listeners (M2-T5 cache, M4 sockets) subscribe.
+  const events = createEventBus((err) => app.log.error({ err }, "event listener failed"));
+  app.decorate("events", events);
 
   // Device + staff session cookies (M1-T6). Better Auth parses its own.
   await app.register(fastifyCookie);
@@ -87,12 +104,15 @@ export async function buildApp(options: BuildAppOptions = {}) {
         // Tenant feature modules (rule 3: getTenantDb + resolveTenant/requirePermission).
         const moduleDeps = buildModuleDeps({
           ...deps,
+          events,
           log: (event, data) => app.log.warn({ event, ...data }, event),
         });
         await api.register(staffRoutes(moduleDeps));
         await api.register(deviceRoutes(moduleDeps));
         await api.register(deviceAuthRoutes(moduleDeps));
         await api.register(outletSettingsRoutes(moduleDeps));
+        await api.register(menuRoutes(moduleDeps));
+        if (deps.storage.read) await api.register(fileRoutes(deps.storage));
         if (deps.devOtp && process.env.NODE_ENV !== "production") {
           await api.register(devRoutes(deps.devOtp));
         }

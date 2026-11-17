@@ -1,5 +1,5 @@
 // Demo menu for the seed outlet: 6 categories × 5 items, prices in paise, tax in basis points.
-// Restaurant food is 5% GST (SAC 996331); packaged water 18% (HSN 2201); aerated drinks 28% (HSN 2202).
+// Restaurant food is 5% GST (SAC 996331); packaged water 18% (HSN 2201); aerated drinks 40% (HSN 2202) — the Sept 2025 slabs (M2-T1); a CA confirms per item (plan §18).
 
 export type Diet = "VEG" | "NON_VEG" | "EGG";
 export type AddOnGroupKey = "extras" | "spice";
@@ -317,7 +317,7 @@ export const MENU: readonly MenuCategorySeed[] = [
         nameHi: "सॉफ्ट ड्रिंक (कैन)",
         diet: "VEG",
         price: 6_000,
-        taxRateBps: 2_800,
+        taxRateBps: 4_000,
         hsnSac: "2202",
       },
     ],

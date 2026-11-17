@@ -1,9 +1,11 @@
+import { GST_RATES_BPS as ALLOWED_RATES } from "@restoos/shared";
 import { describe, expect, it } from "vitest";
 import { ADD_ON_GROUPS, MENU } from "./menu";
 import { FEATURE_KEYS, LIMIT_KEYS, PLANS, UNLIMITED } from "./plans";
 import { DEMO_SECTIONS, DEMO_STAFF } from "./tenant";
 
-const GST_RATES_BPS = new Set([0, 500, 1_200, 1_800, 2_800]);
+// The same list the menu editor and API accept (M2-T1).
+const GST_RATES_BPS = new Set<number>(ALLOWED_RATES);
 const isPaise = (n: number) => Number.isInteger(n) && n >= 0;
 
 describe("seed menu", () => {

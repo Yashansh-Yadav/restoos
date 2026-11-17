@@ -1,4 +1,7 @@
 // Test harness for auth integration tests: real Fastify app + Better Auth + test DB + Redis db 1.
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createTestDb, resetTestDb } from "@restoos/db/testing";
 import { loadRootEnv } from "@restoos/shared/env/node";
 import type { LightMyRequestResponse } from "fastify";
@@ -8,6 +11,7 @@ import type { PrismaClient } from "@restoos/db";
 import { createAuth, type Auth } from "../lib/auth";
 import { ConsoleOtpProvider } from "../lib/otp/provider";
 import { createRedis, type Redis } from "../lib/redis";
+import { createLocalDiskStorage, type FileStorage } from "../lib/storage";
 
 loadRootEnv();
 
@@ -26,7 +30,7 @@ export type HarnessOptions = {
   /** Adds test-only routes before the app starts (e.g. to exercise preHandlers). */
   setup?: (
     app: App,
-    deps: { auth: Auth; prisma: PrismaClient; redis: Redis },
+    deps: { auth: Auth; prisma: PrismaClient; redis: Redis; storage: FileStorage },
   ) => void | Promise<void>;
 };
 
@@ -35,6 +39,9 @@ export async function createAuthHarness(options: HarnessOptions = {}) {
   const redis = createRedis(testRedisUrl());
   await resetTestDb(prisma);
   await redis.flushdb();
+  // Uploaded files go to a throwaway folder per harness.
+  const storageDir = await mkdtemp(join(tmpdir(), "restoos-files-"));
+  const storage = createLocalDiskStorage(storageDir);
 
   const otp = new ConsoleOtpProvider(quiet);
   const auth = createAuth({
@@ -52,9 +59,9 @@ export async function createAuthHarness(options: HarnessOptions = {}) {
   });
   const app: App = await buildApp({
     docs: false,
-    deps: { prisma, redis, auth, appUrl: ORIGIN, googleEnabled: true, devOtp: otp },
+    deps: { prisma, redis, storage, auth, appUrl: ORIGIN, googleEnabled: true, devOtp: otp },
   });
-  await options.setup?.(app, { auth, prisma, redis });
+  await options.setup?.(app, { auth, prisma, redis, storage });
 
   /** Cookie jar: keeps whatever Set-Cookie the API returns, like a browser would. */
   const jar = new Map<string, string>();
@@ -98,13 +105,19 @@ export async function createAuthHarness(options: HarnessOptions = {}) {
 
   const close = async () => {
     await app.close();
-    await Promise.allSettled([prisma.$disconnect(), redis.quit()]);
+    await Promise.allSettled([
+      prisma.$disconnect(),
+      redis.quit(),
+      rm(storageDir, { recursive: true, force: true }),
+    ]);
   };
 
   return {
     app,
     prisma,
     redis,
+    storage,
+    storageDir,
     otp,
     jar,
     request,

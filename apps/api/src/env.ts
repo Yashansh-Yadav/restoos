@@ -39,7 +39,9 @@ const apiEnvObject = z.object({
     z.string().regex(/^(mailto:|https:\/\/)/, "must start with mailto: or https://"),
   ),
 
-  // File storage (M2-T1)
+  // File storage (M2-T1): menu photos, later PDFs. `local` = disk under STORAGE_DIR (dev/tests).
+  STORAGE_DRIVER: z.enum(["local", "s3"]).default("local"),
+  STORAGE_DIR: optional(z.string()),
   S3_BUCKET: optional(z.string()),
   S3_REGION: z.string().default("ap-south-1"),
   S3_ACCESS_KEY_ID: optional(z.string()),
@@ -79,6 +81,12 @@ export const apiEnvSchema = apiEnvObject.superRefine((env, ctx) => {
     issue("OTP_API_KEY", `required when OTP_PROVIDER=${env.OTP_PROVIDER}`);
   }
 
+  if (env.STORAGE_DRIVER === "s3") {
+    for (const key of ["S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"] as const) {
+      if (!env[key]) issue(key, "required when STORAGE_DRIVER=s3");
+    }
+  }
+
   if (env.NODE_ENV !== "production") return;
   // Production must never run with development shortcuts.
   if (env.BETTER_AUTH_SECRET === DEV_AUTH_SECRET) {
@@ -88,6 +96,9 @@ export const apiEnvSchema = apiEnvObject.superRefine((env, ctx) => {
     issue("OTP_PROVIDER", "console (prints OTPs to the log) is not allowed in production");
   }
   if (!env.GOOGLE_CLIENT_ID) issue("GOOGLE_CLIENT_ID", "required in production");
+  if (env.STORAGE_DRIVER === "local") {
+    issue("STORAGE_DRIVER", "local disk is not allowed in production (use s3)");
+  }
   if (!env.APP_URL.startsWith("https://")) issue("APP_URL", "must be https:// in production");
 });
 

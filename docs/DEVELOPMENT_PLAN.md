@@ -869,7 +869,7 @@ Milestones are grouped into phases. Each phase ends in a **demo you can run** an
 **Known gaps in phase order** (decide before the phase that hits them):
 1. **Entitlements are built in M12 (P8) but needed from P3** (`CUSTOMER_SELF_ORDER` in M5-T6, `BELL_SYSTEM` in M8, `STAFF_ANALYTICS` in M10-T3). Proposal: add a stub `hasFeature()`/`getLimit()` in P1 (M1-T4) that reads the seeded plan, so call sites exist from day one and M12 only replaces the resolver. **Adopted 2026-11-16 (M1-T4).**
 2. **M5-T5 (VOID KOT print) depends on M6 printing**, and **M6-T3 auto-print bill depends on M7 bills.** Proposal: do M5-T5's print part in M6, and the bill half of M6-T3 inside M7-T1.
-3. **Real-time (M4) is in P3, but M2-T4 stock toggle (P2) emits `menu.stockChanged`.** Proposal: M2-T4 calls `publishEvent()` with no Socket.io attached yet (a no-op emitter); M4-T2 attaches Socket.io.
+3. **Real-time (M4) is in P3, but M2-T4 stock toggle (P2) emits `menu.stockChanged`.** Proposal: M2-T4 calls `publishEvent()` with no Socket.io attached yet (a no-op emitter); M4-T2 attaches Socket.io. **Adopted 2026-11-17 (M2-T1).**
 
 ### M0 — Foundations (week 1)
 - [x] **M0-T1** Scaffold monorepo (pnpm, Turborepo), `apps/web` (Next.js, TS strict, Tailwind, shadcn/ui), `apps/server`, `packages/{db,shared,print,config}`.
@@ -899,8 +899,8 @@ Milestones are grouped into phases. Each phase ends in a **demo you can run** an
 - [x] **M1-T7** Shifts: staff "Start shift" / "End shift" (auto-start on first login of the day, configurable). Audit log helper `audit(ctx, action, entity, id, data)`.
 
 ### M2 — Menu (week 2–3)
-- [ ] **M2-T1** Menu CRUD in `/owner/menu`: categories, items, variants, add-on groups, diet type, GST rate, HSN, item code, image upload (S3, resized).
-- [ ] **M2-T2** Downloadable Excel template (exceljs) with a header row, an example row, data validation dropdowns (diet type, GST rate 0/5/12/18/28) and an instructions sheet.
+- [x] **M2-T1** Menu CRUD in `/owner/menu`: categories, items, variants, add-on groups, diet type, GST rate, HSN, item code, image upload (S3, resized).
+- [ ] **M2-T2** Downloadable Excel template (exceljs) with a header row, an example row, data validation dropdowns (diet type, GST rate 0/5/18/40 — `GST_RATES_BPS`) and an instructions sheet.
 - [ ] **M2-T3** Excel import: upload → parse → validate every row (zod) → **preview screen** showing new/updated/error rows with row+column messages → commit in one transaction. Upsert by item `code` when present.
   *Accept:* a file with 3 bad rows shows exactly those 3 errors and commits nothing until fixed or the owner chooses "import valid rows only".
 - [ ] **M2-T4** One-tap "Out of stock" toggle (owner, manager, cashier, kitchen) → emits `menu.stockChanged`.
@@ -1154,6 +1154,12 @@ Prices exclude 18% GST and are stored in the DB (paise), editable from `/admin` 
 | 2026-11-17 | **Shifts:** one open shift per person; `Outlet.autoStartShift` (default **on**, migration `outlet_auto_start_shift`) starts it on the first PIN sign-in of the day in the outlet's timezone; otherwise staff tap **Start Shift** (idempotent). **End Shift** closes it **and signs out**; **Switch User** signs out but keeps the shift (hand-over mid-shift). A shift left open from an earlier day is **auto-closed at start + 14 h** (or now if sooner) and audited as `shift.autoClosed`. `ensureShift` runs Serializable (retry once) so concurrent sign-ins open one shift; an auto-start failure never blocks sign-in | Bell routing (M8) and table assignment (M3) need "who's on duty" |
 | 2026-11-17 | **`audit()`** (`apps/api/src/lib/audit.ts`): `audit(ctx, action, entity, id, data)` via `createAudit(getTenantDb)`, or `writeAudit(tx, ctx, …)` inside a transaction. Actions are a closed list (`packages/shared/src/audit.ts`). Actor = OWNER/EMPLOYEE/SYSTEM from `ctx`. **AuditLog is append-only, enforced by the tenant client** (update/upsert/delete → `TenantViolationError`). Audited now: shift start/end/auto-close, PIN lockout, PIN reset, staff (de/re)activation and role change, device pair/unpair, outlet settings (before/after) | Rule 7 ready before the first sensitive business action (M5) |
 | 2026-11-17 | Outlet settings API `GET/PATCH /api/owner/outlet/settings` (today: `autoStartShift`), guarded by `staff.manage` until a general settings permission exists; toggle lives on `/owner/staff` | Smallest place that fits; a full settings screen comes later |
+| 2026-11-17 | **GST rates an item may carry: 0, 5, 18, 40 %** (`GST_RATES_BPS`, the Sept 2025 slabs; 12 % and 28 % dropped). Default 5 % (restaurant food), default SAC 996331. One constant validates the editor, API, seed and (M2-T2) Excel template | Current law; CA confirms per item (§18) |
+| 2026-11-17 | **File storage:** `FileStorage` interface (`apps/api/src/lib/storage.ts`); `STORAGE_DRIVER=local` writes under `STORAGE_DIR` (default `<repo>/.data/uploads`, gitignored) and serves `GET /api/files/*` (immutable cache, safe keys only); `s3` is validated (bucket + keys) but fails fast until the bucket exists; production rejects `local` | No AWS account yet; S3 adapter lands with the bucket |
+| 2026-11-17 | **Menu photos:** `@fastify/multipart` 10.1.8 + `sharp` 0.35.5 (new deps). JPG/PNG/WebP ≤ 5 MB → auto-rotated, fit 800×800, WebP q80, metadata stripped; new random key per upload (cache-safe), old file deleted on replace/remove. `@fastify/multipart` pinned one release back: 10.1.9 was a day old and pnpm's minimum-release-age guard was left on | Small fast images; keep supply-chain guard |
+| 2026-11-17 | **Menu editing rules:** categories and items are **hidden, never deleted** (orders/bills reference items); add-on groups may be deleted (order lines snapshot add-ons). Item edits replace sizes/add-on links only when sent; with sizes, `basePrice` = the smallest size price ("from ₹…"). Item `code` unique per outlet → 409 `CODE_TAKEN` | History stays intact |
+| 2026-11-17 | **`publishEvent()` adopted (closes §17 proposal #3):** typed event map `packages/shared/src/events.ts`; one `EventBus` per app (`app.events`), routes publish after writes (`menu.changed` now); no subscribers until the M2-T5 cache and M4 Socket.io; listener errors are logged, never thrown into the write | Call sites correct from day one |
+| 2026-11-17 | Zod 4 note: `.partial()` keeps field defaults, so update schemas are built from default-free fields (an omitted field must mean "unchanged") | Caught by a test: an edit wiped item sizes |
 | | *(add new decisions here)* | |
 
 ## 18. Open questions (resolve before the milestone that needs them)
@@ -1165,7 +1171,7 @@ Prices exclude 18% GST and are stored in the DB (paise), editable from `/admin` 
 - [ ] Payment gateway account + UPI QR approach confirmed (M7, M12)
 - [ ] Printer models used by pilot restaurants (M6)
 - [ ] Legal review: bill format, service charge, privacy notice and consent text under DPDP Act (M7)
-- [ ] **CA to confirm GST treatment** (before M7 / launch): GST on the service charge (implemented: yes, at the item rate), rounding per line vs per rate, and the tax rates used for packaged goods (seed uses 18% water, 28% aerated drinks; compensation cess not modelled). One-file change in `packages/shared/src/gst.ts` if the answer differs
+- [ ] **CA to confirm GST treatment** (before M7 / launch): GST on the service charge (implemented: yes, at the item rate), rounding per line vs per rate, and the tax rates used for packaged goods (allowed item rates are the Sept 2025 slabs **0/5/18/40 %** in `packages/shared/src/menu.ts`; seed uses 18% water, 40% aerated drinks; compensation cess not modelled). One-file change in `packages/shared/src/gst.ts` if the answer differs
 - [ ] Final product name and domain (before M3 QR printing)
 - [ ] **i18n helper has no task.** CLAUDE.md requires Hindi strings via an i18n helper. Proposal: add M1-T8 "i18n setup" (e.g. `next-intl`, EN + HI message files, locale toggle) before the first customer-facing screen (M5-T6)
 - [ ] Prisma version for M0-T2: npm `latest` is `8.0.0-rc` (release candidate). Proposal: use stable 7.10.x

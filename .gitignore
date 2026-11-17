@@ -26,3 +26,6 @@ test-results/
 
 # Graphify knowledge graph (rebuilt locally from code by git hooks)
 graphify-out/
+
+# Local file storage (menu photos in dev, M2-T1)
+.data/

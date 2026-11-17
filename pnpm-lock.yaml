@@ -187,6 +187,9 @@ importers:
       '@fastify/cookie':
         specifier: 11.1.5
         version: 11.1.5
+      '@fastify/multipart':
+        specifier: 10.1.8
+        version: 10.1.8
       '@fastify/swagger':
         specifier: 9.9.3
         version: 9.9.3(supports-color@7.2.0)
@@ -220,6 +223,9 @@ importers:
       pino:
         specifier: 10.4.0
         version: 10.4.0
+      sharp:
+        specifier: 0.35.5
+        version: 0.35.5(@types/node@24.19.2)
       tsx:
         specifier: 4.23.15
         version: 4.23.15
@@ -829,6 +835,9 @@ packages:
   '@fastify/ajv-compiler@4.0.7':
     resolution: {integrity: sha512-VP0yIfwlc1ohj733keYDqyHm1VWeP9VQxYomunhr90jkC4aNNibbkrRiaNgPgqj1ORxUenILR4qzA/ppYBNAtQ==}
 
+  '@fastify/busboy@3.2.5':
+    resolution: {integrity: sha512-y8MTAeBlEQUNVnskmZQwpseZN3EgCksQNOULlfxWY6o6VEqh01+oExMgbM7gN6YLQ8pNDYeweNPKJRt8jQm2ZQ==}
+
   '@fastify/cookie@11.1.5':
     resolution: {integrity: sha512-hs7e0otf7n/lJMpt63EFdQb5/u8kO6DeexEtLPVTybSdItC6SwJ1O0vtTyWvKNR70LZcHLlsUr/y3jFpqtyWRA==}
 
@@ -846,6 +855,9 @@ packages:
 
   '@fastify/merge-json-schemas@0.2.2':
     resolution: {integrity: sha512-d/gx9sRbUCVgGRGzma46wLcwiY8noTqO2Nmjg/vbTARxHRE5bdh5PIL8s97Lt1X7ScRWRW52eVYxwIoPwIdVUA==}
+
+  '@fastify/multipart@10.1.8':
+    resolution: {integrity: sha512-GNZ6bKyqiKpb1VRhOJtb38X92NSEQIM+piO3sid13oP5xmuVmdbFq32khGh4Ru/jMAJoAVxt4yzuUNPwc/CdSg==}
 
   '@fastify/proxy-addr@5.1.2':
     resolution: {integrity: sha512-uqB4QsgVoro0XDC+DIftIMGXHdBPn+lK6Ek3xXAIxPMCJfqxnbtyEoMCm2KPUVOuIosd7Cyw9HawEqMFM/UA+g==}
@@ -5744,6 +5756,8 @@ snapshots:
       ajv-formats: 3.0.1
       fast-uri: 4.2.3
 
+  '@fastify/busboy@3.2.5': {}
+
   '@fastify/cookie@11.1.5':
     dependencies:
       cookie: 2.0.2
@@ -5762,6 +5776,14 @@ snapshots:
   '@fastify/merge-json-schemas@0.2.2':
     dependencies:
       dequal: 2.0.3
+
+  '@fastify/multipart@10.1.8':
+    dependencies:
+      '@fastify/busboy': 3.2.5
+      '@fastify/deepmerge': 3.2.4
+      '@fastify/error': 4.2.1
+      fastify-plugin: 6.0.1
+      secure-json-parse: 4.1.1
 
   '@fastify/proxy-addr@5.1.2':
     dependencies:
@@ -5837,8 +5859,7 @@ snapshots:
 
   '@humanwhocodes/retry@0.4.3': {}
 
-  '@img/colour@1.1.0':
-    optional: true
+  '@img/colour@1.1.0': {}
 
   '@img/sharp-darwin-arm64@0.35.5':
     optionalDependencies:
@@ -9928,7 +9949,6 @@ snapshots:
       '@img/sharp-win32-ia32': 0.35.5
       '@img/sharp-win32-x64': 0.35.5
       '@types/node': 24.19.2
-    optional: true
 
   shebang-command@2.0.0:
     dependencies:

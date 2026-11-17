@@ -1,8 +1,10 @@
 import type { PrismaClient } from "@restoos/db";
 import type { Auth } from "./lib/auth";
 import { createEntitlements, type Entitlements } from "./lib/entitlements";
+import { createEventBus, type EventBus } from "./lib/events";
 import type { Redis } from "./lib/redis";
 import { createStaffAuth, type StaffAuth } from "./lib/staff-auth";
+import type { FileStorage } from "./lib/storage";
 import { createTenantDbFactory, type GetTenantDb } from "./lib/tenant";
 import {
   createFeatureGuard,
@@ -24,18 +26,27 @@ export type ModuleDeps = {
   requireFeature: ReturnType<typeof createFeatureGuard>;
   /** Set Secure on our cookies (APP_URL is https). */
   secureCookies: boolean;
+  /** Uploaded files (menu photos). */
+  storage: FileStorage;
+  /** publishEvent() after successful writes (no-op until M4 attaches Socket.io). */
+  events: EventBus;
 };
 
 export function buildModuleDeps({
   auth,
   prisma,
   redis,
+  storage,
+  events,
   appUrl = "http://localhost:3000",
   log,
 }: {
   auth: Auth;
   prisma: PrismaClient;
   redis: Redis;
+  storage: FileStorage;
+  /** The app's bus (buildApp); tests may omit it to get a private one. */
+  events?: EventBus;
   appUrl?: string;
   log?: (event: string, data: Record<string, unknown>) => void;
 }): ModuleDeps {
@@ -50,5 +61,7 @@ export function buildModuleDeps({
     requireOutlet,
     requireFeature: createFeatureGuard(entitlements),
     secureCookies: appUrl.startsWith("https://"),
+    storage,
+    events: events ?? createEventBus((err) => log?.("event.listener_failed", { err: String(err) })),
   };
 }

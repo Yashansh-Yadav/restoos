@@ -1,4 +1,5 @@
 // API start-up (loaded by server.ts only after the environment is valid).
+import { resolve } from "node:path";
 import { createPrismaClient } from "@restoos/db";
 import { buildApp } from "./app";
 import type { ApiEnv } from "./env";
@@ -7,12 +8,26 @@ import { loggerOptions } from "./lib/logger";
 import { flushErrorReporting, initErrorReporting, reportError } from "./lib/observability";
 import { ConsoleOtpProvider, type OtpProvider } from "./lib/otp/provider";
 import { createRedis } from "./lib/redis";
+import { createLocalDiskStorage, type FileStorage } from "./lib/storage";
 
 function createOtpProvider(env: ApiEnv): OtpProvider {
   if (env.OTP_PROVIDER === "console") return new ConsoleOtpProvider();
   // Env validation already requires OTP_API_KEY; the real adapter lands once a provider is chosen.
   throw new Error(
     `OTP_PROVIDER=${env.OTP_PROVIDER} is not implemented yet (plan §18: choose SMS provider)`,
+  );
+}
+
+function createStorage(env: ApiEnv): FileStorage {
+  if (env.STORAGE_DRIVER === "s3") {
+    // Env validation already requires the bucket and keys; the adapter lands with the bucket.
+    throw new Error(
+      "STORAGE_DRIVER=s3 is not implemented yet (plan §2: create the S3 bucket first)",
+    );
+  }
+  // Repo-root .data/uploads by default (gitignored).
+  return createLocalDiskStorage(
+    env.STORAGE_DIR ?? resolve(import.meta.dirname, "../../../.data/uploads"),
   );
 }
 
@@ -23,6 +38,7 @@ export async function start(env: ApiEnv): Promise<void> {
   const redis = createRedis(env.REDIS_URL);
   const otp = createOtpProvider(env);
   const auth = createAuth({ prisma, redis, env, otp });
+  const storage = createStorage(env);
 
   const app = await buildApp({
     logger: loggerOptions(env),
@@ -32,6 +48,7 @@ export async function start(env: ApiEnv): Promise<void> {
     deps: {
       prisma,
       redis,
+      storage,
       auth,
       appUrl: env.APP_URL,
       googleEnabled: Boolean(env.GOOGLE_CLIENT_ID),

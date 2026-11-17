@@ -32,7 +32,9 @@ export async function apiFetch<S extends z.ZodType>(
 ): Promise<z.infer<S>> {
   const headers = new Headers(init.headers);
   headers.set("accept", "application/json");
-  if (init.body !== undefined && !headers.has("content-type")) {
+  // FormData (file uploads) sets its own multipart content type with the boundary.
+  const isForm = typeof FormData !== "undefined" && init.body instanceof FormData;
+  if (init.body !== undefined && !isForm && !headers.has("content-type")) {
     headers.set("content-type", "application/json");
   }
 
