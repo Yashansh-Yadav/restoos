@@ -80,5 +80,19 @@ export const staffMeResponseSchema = z.object({
   device: z.object({ id: z.string(), label: z.string() }),
   permissions: z.array(z.string()),
   sessionExpiresAt: z.iso.datetime(),
+  /** The open shift, if on duty (M1-T7). */
+  shift: z.object({ id: z.string(), startedAt: z.iso.datetime() }).nullable(),
+  /** The outlet starts shifts on first sign-in of the day; otherwise staff tap Start Shift. */
+  autoStartShift: z.boolean(),
+  /** IANA zone for showing times (e.g. "Asia/Kolkata"). */
+  timeZone: z.string(),
 });
 export type StaffMe = z.infer<typeof staffMeResponseSchema>;
+
+/** POST /api/staff/shift/start */
+export const shiftSchema = z.object({ id: z.string(), startedAt: z.iso.datetime() });
+
+/** GET/PATCH /api/owner/outlet/settings (M1-T7: shift auto-start; more settings later). */
+export const outletSettingsSchema = z.object({ autoStartShift: z.boolean() });
+export const updateOutletSettingsSchema = outletSettingsSchema.partial();
+export type OutletSettings = z.infer<typeof outletSettingsSchema>;

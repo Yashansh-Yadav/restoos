@@ -19,6 +19,7 @@ import { deviceRoutes } from "./modules/devices/routes";
 import { meRoutes } from "./modules/me/routes";
 import { buildModuleDeps } from "./module-deps";
 import { onboardingRoutes } from "./modules/onboarding/routes";
+import { outletSettingsRoutes } from "./modules/outlet-settings/routes";
 import { staffRoutes } from "./modules/staff/routes";
 import { registerAuthHandler } from "./plugins/auth";
 import { registerDocs } from "./plugins/docs";
@@ -91,6 +92,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
         await api.register(staffRoutes(moduleDeps));
         await api.register(deviceRoutes(moduleDeps));
         await api.register(deviceAuthRoutes(moduleDeps));
+        await api.register(outletSettingsRoutes(moduleDeps));
         if (deps.devOtp && process.env.NODE_ENV !== "production") {
           await api.register(devRoutes(deps.devOtp));
         }

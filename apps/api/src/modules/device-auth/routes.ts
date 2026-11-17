@@ -4,6 +4,7 @@ import {
   pairDeviceResponseSchema,
   pairDeviceSchema,
   permissionsFor,
+  shiftSchema,
   staffLoginSchema,
   staffMeResponseSchema,
 } from "@restoos/shared";
@@ -142,7 +143,52 @@ export const deviceAuthRoutes =
           device: { id: me.device.id, label: me.device.label },
           permissions: permissionsFor(me.employee.role),
           sessionExpiresAt: me.session.expiresAt.toISOString(),
+          shift: await staffAuth
+            .currentShift(me)
+            .then((s) => (s ? { id: s.id, startedAt: s.startedAt.toISOString() } : null)),
+          autoStartShift: me.device.autoStartShift,
+          timeZone: me.device.timeZone,
         };
+      },
+    );
+
+    async function signedInStaff(request: FastifyRequest) {
+      const me = await staffAuth.resolve(
+        request.cookies[DEVICE_COOKIE],
+        request.cookies[STAFF_COOKIE],
+      );
+      if (!me) throw new AppError(401, "UNAUTHENTICATED", "Sign in with your PIN");
+      return me;
+    }
+
+    app.post(
+      "/staff/shift/start",
+      {
+        schema: {
+          tags: ["device"],
+          summary: "Start Shift (returns the open shift if already on duty)",
+          response: { 200: shiftSchema, ...errors },
+        },
+      },
+      async (request) => {
+        const shift = await staffAuth.startShift(await signedInStaff(request));
+        return { id: shift.id, startedAt: shift.startedAt.toISOString() };
+      },
+    );
+
+    app.post(
+      "/staff/shift/end",
+      {
+        schema: {
+          tags: ["device"],
+          summary: "End Shift: close the shift and sign out of this device",
+          response: { 204: z.null(), ...errors },
+        },
+      },
+      async (request, reply) => {
+        await staffAuth.endShift(await signedInStaff(request), request.cookies[STAFF_COOKIE]);
+        clearStaff(reply);
+        return reply.code(204).send(null);
       },
     );
 

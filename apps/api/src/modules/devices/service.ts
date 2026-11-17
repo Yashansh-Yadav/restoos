@@ -1,4 +1,5 @@
 import type { Device, PairingCodeResponse } from "@restoos/shared";
+import { writeAudit } from "../../lib/audit";
 import { AppError, notFound } from "../../lib/errors";
 import type { StaffAuth } from "../../lib/staff-auth";
 import type { TenantContext, TenantDb } from "../../lib/tenant";
@@ -107,5 +108,6 @@ export async function newPairingCode(deps: DeviceDeps, id: string): Promise<Pair
 export async function unpairDevice(deps: DeviceDeps, id: string): Promise<Device> {
   await find(deps.db, id); // tenant check: another restaurant's device is "not found"
   await deps.staffAuth.unpair(id);
+  await writeAudit(deps.db, deps.ctx, "device.unpaired", "Device", id);
   return toDevice(deps.staffAuth, await find(deps.db, id));
 }

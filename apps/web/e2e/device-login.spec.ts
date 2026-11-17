@@ -59,9 +59,27 @@ test("pair a device, sign in as a butler with a PIN, and lock after 5 wrong PINs
   await tablet.keyboard.type(pin);
   await expect(tablet.getByRole("heading", { name: "Hi Arjun" })).toBeVisible();
   await expect(tablet.getByText("Butler", { exact: true })).toBeVisible();
+  // M1-T7: the first sign-in of the day starts the shift.
+  await expect(tablet.getByText(/^On shift since/)).toBeVisible();
 
-  // Quick switch: back to the names, still paired.
+  // Quick switch: back to the names, still paired; the shift keeps running.
   await tablet.getByRole("button", { name: "Switch User" }).click();
+  await expect(tablet.getByRole("heading", { name: "Who's Signing In?" })).toBeVisible();
+  await openPad();
+  await tablet.keyboard.type(pin);
+  await expect(tablet.getByText(/^On shift since/)).toBeVisible();
+
+  // End Shift (with a confirm) closes the shift and signs out.
+  await expect(async () => {
+    await tablet.getByRole("button", { name: "End Shift" }).first().click({ timeout: 2_000 });
+    await expect(tablet.getByRole("group", { name: "Confirm end of shift" })).toBeVisible({
+      timeout: 1_000,
+    });
+  }).toPass({ timeout: 20_000 });
+  await tablet
+    .getByRole("group", { name: "Confirm end of shift" })
+    .getByRole("button", { name: "End Shift" })
+    .click();
   await expect(tablet.getByRole("heading", { name: "Who's Signing In?" })).toBeVisible();
 
   // Wrong PIN ×5 → locked, the pad is disabled.

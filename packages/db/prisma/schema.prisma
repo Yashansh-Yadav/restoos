@@ -141,6 +141,7 @@ model Outlet {
   googleReviewUrl       String?
   orderingMode          OrderingMode @default(VIEW_ONLY)
   timezone              String       @default("Asia/Kolkata")
+  autoStartShift        Boolean      @default(true) // start a shift on first PIN sign-in of the day (M1-T7)
   createdAt             DateTime     @default(now())
   updatedAt             DateTime     @updatedAt
 

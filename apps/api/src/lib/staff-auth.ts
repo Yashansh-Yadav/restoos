@@ -7,8 +7,11 @@ import {
   PIN_LOCK_MINUTES,
   PIN_MAX_ATTEMPTS,
 } from "@restoos/shared";
+import { createAudit } from "./audit";
 import { AppError } from "./errors";
 import type { Redis } from "./redis";
+import { ensureShift, openShift } from "./shifts";
+import { createTenantDbFactory, type TenantContext } from "./tenant";
 
 // Staff auth (M1-T6, plan §6.3). Pre-tenant like identity.ts, so it uses the raw client; route
 // modules get this bound service, never the client (rule 3).
@@ -49,6 +52,9 @@ export type AuthedDevice = {
   outletId: string;
   label: string;
   outletName: string;
+  /** Outlet settings the staff area needs (M1-T7). */
+  timeZone: string;
+  autoStartShift: boolean;
 };
 
 export type StaffIdentity = {
@@ -66,7 +72,7 @@ export function createStaffAuth({
 }: {
   prisma: PrismaClient;
   redis: Redis;
-  /** Security events (lockouts). Wired to the app logger; audit() joins in M1-T7. */
+  /** Security events (lockouts) for the app log; they're also written to the audit log. */
   log?: (event: string, data: Record<string, unknown>) => void;
 }) {
   const ttl = PAIRING_CODE_TTL_MINUTES * 60;
@@ -90,7 +96,7 @@ export function createStaffAuth({
         outletId: true,
         label: true,
         deviceSecretHash: true,
-        outlet: { select: { name: true } },
+        outlet: { select: { name: true, timezone: true, autoStartShift: true } },
       },
     });
     if (!device || !sameHash(device.deviceSecretHash, sha256(secret))) return null;
@@ -100,7 +106,41 @@ export function createStaffAuth({
       outletId: device.outletId,
       label: device.label,
       outletName: device.outlet.name,
+      timeZone: device.outlet.timezone,
+      autoStartShift: device.outlet.autoStartShift,
     };
+  }
+
+  // Audit + shifts go through the tenant client, scoped to the device's restaurant.
+  const getTenantDb = createTenantDbFactory(prisma);
+  const audit = createAudit(getTenantDb);
+  const systemCtx = (d: AuthedDevice, reason: string): TenantContext => ({
+    organizationId: d.organizationId,
+    outletId: d.outletId,
+    actor: { kind: "system", reason },
+  });
+  const staffCtx = (d: AuthedDevice, e: { id: string; role: StaffRole }): TenantContext => ({
+    organizationId: d.organizationId,
+    outletId: d.outletId,
+    actor: { kind: "staff", employeeId: e.id, role: e.role },
+  });
+
+  /** Opens today's shift (closing a forgotten one) and records both in the audit log. */
+  async function startShift(d: AuthedDevice, e: { id: string; role: StaffRole }, auto: boolean) {
+    const ctx = staffCtx(d, e);
+    const result = await ensureShift(getTenantDb(ctx), {
+      organizationId: d.organizationId,
+      outletId: d.outletId,
+      employeeId: e.id,
+      timeZone: d.timeZone,
+    });
+    if (result.autoClosed) {
+      await audit(ctx, "shift.autoClosed", "Shift", result.autoClosed.id, {
+        endedAt: result.autoClosed.endedAt.toISOString(),
+      });
+    }
+    if (result.started) await audit(ctx, "shift.start", "Shift", result.shift.id, { auto });
+    return result.shift;
   }
 
   return {
@@ -154,7 +194,9 @@ export function createStaffAuth({
       ]);
       const cookie = `${deviceId}.${secret}`;
       const device = await authenticateDevice(cookie);
-      return device ? { cookie, device } : null;
+      if (!device) return null;
+      await audit(systemCtx(device, "pairing"), "device.paired", "Device", device.id);
+      return { cookie, device };
     },
 
     /** Unpairs: the device cookie stops working and everyone on it is signed out. */
@@ -194,7 +236,7 @@ export function createStaffAuth({
 
       const employee = await prisma.employee.findFirst({
         where: { id: employeeId, outletId: device.outletId, isActive: true },
-        select: { id: true, pinHash: true },
+        select: { id: true, pinHash: true, role: true },
       });
       const ok = employee ? await verify(employee.pinHash, pin) : false;
       if (!employee || !ok) {
@@ -202,6 +244,10 @@ export function createStaffAuth({
         if (count === 1) await redis.expire(failKey, PIN_LOCK_MINUTES * 60);
         if (count >= PIN_MAX_ATTEMPTS) {
           log("staff.pin_locked", { deviceId: device.id, employeeId, attempts: count });
+          await audit(systemCtx(device, "pin-lockout"), "staff.pinLocked", "Device", device.id, {
+            employeeId,
+            attempts: count,
+          });
           throw new AppError(429, "PIN_LOCKED", "Too many wrong PINs on this device.", {
             retryAfterSeconds: Math.max(1, await redis.ttl(failKey)),
           });
@@ -226,6 +272,14 @@ export function createStaffAuth({
         }),
         prisma.device.update({ where: { id: device.id }, data: { lastSeenAt: new Date() } }),
       ]);
+      // First sign-in of the day starts the shift (outlet setting, M1-T7). Never blocks sign-in.
+      if (device.autoStartShift) {
+        try {
+          await startShift(device, employee, true);
+        } catch (err) {
+          log("shift.autostart_failed", { deviceId: device.id, employeeId, err: String(err) });
+        }
+      }
       return { cookie: value, expiresAt };
     },
 
@@ -256,6 +310,30 @@ export function createStaffAuth({
       }
       const { isActive: _active, ...employee } = session.employee;
       return { session: { id: session.id, expiresAt: session.expiresAt }, device, employee };
+    },
+
+    /** The signed-in person's open shift, or null. */
+    currentShift: (me: StaffIdentity) =>
+      openShift(getTenantDb(staffCtx(me.device, me.employee)), me.employee.id),
+
+    /** "Start Shift" (idempotent: returns the open shift). */
+    startShift: (me: StaffIdentity) => startShift(me.device, me.employee, false),
+
+    /** "End Shift": closes the shift and signs this person out of the device. */
+    async endShift(me: StaffIdentity, staffCookie: string | undefined): Promise<void> {
+      const ctx = staffCtx(me.device, me.employee);
+      const db = getTenantDb(ctx);
+      const open = await openShift(db, me.employee.id);
+      if (open) {
+        await db.shift.updateMany({
+          where: { employeeId: me.employee.id, endedAt: null },
+          data: { endedAt: new Date() },
+        });
+        await audit(ctx, "shift.end", "Shift", open.id);
+      }
+      if (staffCookie) {
+        await prisma.staffSession.deleteMany({ where: { tokenHash: sha256(staffCookie) } });
+      }
     },
 
     async logout(staffCookie: string | undefined): Promise<void> {

@@ -1,6 +1,7 @@
 import { hash } from "@node-rs/argon2";
 import type { Employee, StaffList, StaffRole } from "@restoos/shared";
 import type { Entitlements } from "../../lib/entitlements";
+import { writeAudit } from "../../lib/audit";
 import { AppError, forbidden, notFound } from "../../lib/errors";
 import type { TenantContext, TenantDb } from "../../lib/tenant";
 
@@ -111,6 +112,23 @@ export async function updateEmployee(
     select,
   });
   if (input.isActive === false) await revokeSessions(deps.db, id);
+
+  // Security-relevant changes go to the audit log (M1-T7).
+  if (input.isActive !== undefined && input.isActive !== current.isActive) {
+    await writeAudit(
+      deps.db,
+      deps.ctx,
+      input.isActive ? "staff.reactivated" : "staff.deactivated",
+      "Employee",
+      id,
+    );
+  }
+  if (input.role !== undefined && input.role !== current.role) {
+    await writeAudit(deps.db, deps.ctx, "staff.roleChanged", "Employee", id, {
+      from: current.role,
+      to: input.role,
+    });
+  }
   return toEmployee(row);
 }
 
@@ -123,4 +141,5 @@ export async function setPin(deps: StaffDeps, id: string, pin: string): Promise<
     data: { pinHash: await hash(pin), pinLength: pin.length },
   });
   await revokeSessions(deps.db, id);
+  await writeAudit(deps.db, deps.ctx, "staff.pinReset", "Employee", id);
 }

@@ -1,4 +1,4 @@
-import { pairDeviceResponseSchema } from "@restoos/shared";
+import { pairDeviceResponseSchema, shiftSchema } from "@restoos/shared";
 import { z } from "zod";
 import { apiFetch } from "@/lib/api";
 
@@ -23,3 +23,11 @@ export const staffLogin = (employeeId: string, pin: string) =>
 
 export const staffLogout = () =>
   apiFetch("/api/staff/logout", z.undefined(), { ...same, method: "POST" });
+
+/** Start Shift (M1-T7); returns the open shift if already on duty. */
+export const startShift = () =>
+  apiFetch("/api/staff/shift/start", shiftSchema, { ...same, method: "POST" });
+
+/** End Shift: closes the shift and signs out of this device. */
+export const endShift = () =>
+  apiFetch("/api/staff/shift/end", z.undefined(), { ...same, method: "POST" });

@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getMe } from "@/features/auth/api";
+import { AutoStartShift } from "@/features/outlet-settings/components/auto-start-shift";
+import { getOutletSettings } from "@/features/outlet-settings/server";
 import { StaffManager } from "@/features/staff/components/staff-manager";
 import { getStaff } from "@/features/staff/server";
 
@@ -21,8 +23,8 @@ export default async function StaffPage({
   const outlet = me.owner.outlets.find((o) => o.id === wanted) ?? me.owner.outlets[0];
   if (!outlet) redirect("/onboarding");
 
-  const staff = await getStaff(outlet.id);
-  if (!staff) redirect("/login");
+  const [staff, settings] = await Promise.all([getStaff(outlet.id), getOutletSettings(outlet.id)]);
+  if (!staff || !settings) redirect("/login");
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-10">
@@ -39,6 +41,7 @@ export default async function StaffPage({
         ) : null}
       </nav>
       <StaffManager outletId={outlet.id} initial={staff} />
+      <AutoStartShift outletId={outlet.id} initial={settings.autoStartShift} />
     </main>
   );
 }

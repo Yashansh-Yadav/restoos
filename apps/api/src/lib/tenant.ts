@@ -162,6 +162,10 @@ export function createTenantDbFactory(prisma: PrismaClient) {
       ) {
         throw new TenantViolationError(`${model} cannot be created or deleted by a tenant`);
       }
+      // The audit log is append-only (rule 7): read and add, never change or remove.
+      if (model === "AuditLog" && !READ_OPS.has(operation) && !CREATE_OPS.has(operation)) {
+        throw new TenantViolationError("AuditLog is append-only");
+      }
 
       if (!CREATE_OPS.has(operation)) {
         args.where = withScope(

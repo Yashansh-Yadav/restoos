@@ -4,15 +4,14 @@ import { seedPlans } from "@restoos/db/testing";
 import {
   apiErrorSchema,
   deviceStaffResponseSchema,
-  employeeSchema,
   pairingCodeResponseSchema,
   staffMeResponseSchema,
 } from "@restoos/shared";
 import type { LightMyRequestResponse } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildModuleDeps } from "../../module-deps";
-import { OUTLET_HEADER } from "../../plugins/tenant";
-import { createAuthHarness, ORIGIN } from "../../test/auth-harness";
+import { createAuthHarness } from "../../test/auth-harness";
+import { browser as makeBrowser, restaurant as makeRestaurant } from "../../test/restaurant";
 
 type Harness = Awaited<ReturnType<typeof createAuthHarness>>;
 let h: Harness;
@@ -26,68 +25,8 @@ const code = (res: LightMyRequestResponse) => apiErrorSchema.parse(res.json()).e
 const details = (res: LightMyRequestResponse) =>
   apiErrorSchema.parse(res.json()).error.details as Record<string, number>;
 
-/** A browser of its own (cookie jar), e.g. the restaurant's counter tablet. */
-function browser() {
-  const jar = new Map<string, string>();
-  return {
-    jar,
-    async call(method: "GET" | "POST", url: string, payload?: object, ip = "198.51.100.1") {
-      const res = await h.app.inject({
-        method,
-        url,
-        ...(payload ? { payload } : {}),
-        headers: {
-          origin: ORIGIN,
-          cookie: [...jar].map(([k, v]) => `${k}=${v}`).join("; "),
-          "x-forwarded-for": ip,
-        },
-        remoteAddress: ip,
-      });
-      for (const c of res.cookies) {
-        if (c.maxAge === 0 || c.value === "" || (c.expires && c.expires.getTime() < Date.now())) {
-          jar.delete(c.name);
-        } else jar.set(c.name, c.value);
-      }
-      return res;
-    },
-  };
-}
-
-/** Owner onboarded, with staff and an `owner(...)` helper bound to their outlet. */
-async function restaurant(phone = "+919876543210") {
-  await h.signInWithPhone(phone);
-  const onboarded = await h.request("POST", "/api/onboarding", {
-    organization: { name: "Saffron Table", legalName: "Saffron Table Pvt Ltd" },
-    outlet: {
-      name: "Bandra",
-      address: "12 Hill Road, Bandra West, Mumbai 400050",
-      stateCode: "27",
-      pricesIncludeTax: false,
-      code: "ST",
-    },
-  });
-  const { outletId } = onboarded.json<{ outletId: string }>();
-  const owner = (method: "GET" | "POST", url: string, body?: object) =>
-    h.request(method, url, body, { [OUTLET_HEADER]: outletId });
-  const addStaff = async (name: string, role: string, pin: string) =>
-    employeeSchema.parse((await owner("POST", "/api/owner/staff", { name, role, pin })).json());
-  const newDevice = async (label = "Counter tablet") =>
-    pairingCodeResponseSchema.parse(
-      (await owner("POST", "/api/owner/devices", { label, isStation: false })).json(),
-    );
-  const deactivate = (id: string) =>
-    h.app.inject({
-      method: "PATCH",
-      url: `/api/owner/staff/${id}`,
-      payload: { isActive: false },
-      headers: {
-        origin: ORIGIN,
-        [OUTLET_HEADER]: outletId,
-        cookie: [...h.jar].map(([k, v]) => `${k}=${v}`).join("; "),
-      },
-    });
-  return { outletId, owner, addStaff, newDevice, deactivate };
-}
+const browser = () => makeBrowser(h);
+const restaurant = (phone?: string) => makeRestaurant(h, phone);
 
 async function setup() {
   h = await createAuthHarness();

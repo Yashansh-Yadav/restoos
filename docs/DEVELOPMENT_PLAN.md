@@ -896,7 +896,7 @@ Milestones are grouped into phases. Each phase ends in a **demo you can run** an
 - [x] **M1-T5** Employee management in `/owner/staff`: add/edit/deactivate, set role, set/reset PIN.
 - [x] **M1-T6** Device pairing + staff PIN login (Section 6.3), quick user switch, lockout.
   *Accept:* E2E: pair device → PIN login as butler → sees butler home; wrong PIN ×5 → locked.
-- [ ] **M1-T7** Shifts: staff "Start shift" / "End shift" (auto-start on first login of the day, configurable). Audit log helper `audit(ctx, action, entity, id, data)`.
+- [x] **M1-T7** Shifts: staff "Start shift" / "End shift" (auto-start on first login of the day, configurable). Audit log helper `audit(ctx, action, entity, id, data)`.
 
 ### M2 — Menu (week 2–3)
 - [ ] **M2-T1** Menu CRUD in `/owner/menu`: categories, items, variants, add-on groups, diet type, GST rate, HSN, item code, image upload (S3, resized).
@@ -1151,6 +1151,9 @@ Prices exclude 18% GST and are stored in the DB (paise), editable from `/admin` 
 | 2026-11-16 | Deferred to M4: an owner on a paired device acting as staff (§6.3 #5) — needs a UI switch on the first staff feature screens | Not needed until staff screens exist |
 | 2026-11-16 | `@fastify/cookie` 11.1.5 added to `apps/api` (cookie parsing/setting for device + staff sessions); `AppError` carries optional client-safe `details` | Official Fastify plugin; lock countdowns need data |
 | 2026-11-17 | **Next.js 16.4.2 → 16.4.6** (and `eslint-config-next`): moderate advisory for 16.3.0–16.4.4 (information disclosure via `'use cache'` + `unstable_cache()`); RestoOS uses neither, but `next build` refuses affected versions. Remaining audit item: `minimatch` <11.0.1 (moderate ReDoS) inside the ESLint toolchain only — lint-time, not shipped; revisit when eslint-config-next updates its resolver | Keep production builds unblocked and patched |
+| 2026-11-17 | **Shifts:** one open shift per person; `Outlet.autoStartShift` (default **on**, migration `outlet_auto_start_shift`) starts it on the first PIN sign-in of the day in the outlet's timezone; otherwise staff tap **Start Shift** (idempotent). **End Shift** closes it **and signs out**; **Switch User** signs out but keeps the shift (hand-over mid-shift). A shift left open from an earlier day is **auto-closed at start + 14 h** (or now if sooner) and audited as `shift.autoClosed`. `ensureShift` runs Serializable (retry once) so concurrent sign-ins open one shift; an auto-start failure never blocks sign-in | Bell routing (M8) and table assignment (M3) need "who's on duty" |
+| 2026-11-17 | **`audit()`** (`apps/api/src/lib/audit.ts`): `audit(ctx, action, entity, id, data)` via `createAudit(getTenantDb)`, or `writeAudit(tx, ctx, …)` inside a transaction. Actions are a closed list (`packages/shared/src/audit.ts`). Actor = OWNER/EMPLOYEE/SYSTEM from `ctx`. **AuditLog is append-only, enforced by the tenant client** (update/upsert/delete → `TenantViolationError`). Audited now: shift start/end/auto-close, PIN lockout, PIN reset, staff (de/re)activation and role change, device pair/unpair, outlet settings (before/after) | Rule 7 ready before the first sensitive business action (M5) |
+| 2026-11-17 | Outlet settings API `GET/PATCH /api/owner/outlet/settings` (today: `autoStartShift`), guarded by `staff.manage` until a general settings permission exists; toggle lives on `/owner/staff` | Smallest place that fits; a full settings screen comes later |
 | | *(add new decisions here)* | |
 
 ## 18. Open questions (resolve before the milestone that needs them)
