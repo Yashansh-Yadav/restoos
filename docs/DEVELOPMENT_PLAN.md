@@ -1150,6 +1150,7 @@ Prices exclude 18% GST and are stored in the DB (paise), editable from `/admin` 
 | 2026-11-16 | **PIN lockout per device:** 5 wrong PINs in 5 minutes → 429 `PIN_LOCKED` with `retryAfterSeconds` (Redis counter); a wrong employee id counts as a wrong PIN; success clears the counter; lockouts are logged (`staff.pin_locked`) until `audit()` lands in M1-T7 | Plan §6.3 #4 |
 | 2026-11-16 | Deferred to M4: an owner on a paired device acting as staff (§6.3 #5) — needs a UI switch on the first staff feature screens | Not needed until staff screens exist |
 | 2026-11-16 | `@fastify/cookie` 11.1.5 added to `apps/api` (cookie parsing/setting for device + staff sessions); `AppError` carries optional client-safe `details` | Official Fastify plugin; lock countdowns need data |
+| 2026-11-17 | **Next.js 16.4.2 → 16.4.6** (and `eslint-config-next`): moderate advisory for 16.3.0–16.4.4 (information disclosure via `'use cache'` + `unstable_cache()`); RestoOS uses neither, but `next build` refuses affected versions. Remaining audit item: `minimatch` <11.0.1 (moderate ReDoS) inside the ESLint toolchain only — lint-time, not shipped; revisit when eslint-config-next updates its resolver | Keep production builds unblocked and patched |
 | | *(add new decisions here)* | |
 
 ## 18. Open questions (resolve before the milestone that needs them)
