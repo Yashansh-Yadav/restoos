@@ -1,19 +1,7 @@
-import { expect, test, type Page } from "@playwright/test";
-import { randomMobile, signInWithPhone } from "./helpers";
+import { expect, test } from "@playwright/test";
+import { onboard, randomMobile, signInWithPhone } from "./helpers";
 
 // M1-T6 acceptance: pair a device → PIN login as butler → sees butler home; wrong PIN ×5 → locked.
-
-async function onboard(page: Page) {
-  const next = page.getByRole("button", { name: "Continue" });
-  await page.getByLabel("Brand Name").fill("Saffron Table");
-  await page.getByLabel("Legal Name").fill("Saffron Table Hospitality Pvt Ltd");
-  await next.click();
-  await page.getByLabel("Address").fill("12 Hill Road, Bandra West, Mumbai 400050");
-  await page.getByLabel("State").selectOption("27");
-  await next.click();
-  await page.getByRole("button", { name: "Finish Setup" }).click();
-  await expect(page).toHaveURL(/\/owner$/);
-}
 
 test("pair a device, sign in as a butler with a PIN, and lock after 5 wrong PINs", async ({
   page,

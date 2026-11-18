@@ -16,3 +16,16 @@ export async function signInWithPhone(page: Page, request: APIRequestContext, lo
   // Typing the 6th digit submits on its own (one tap saved).
   await page.getByLabel("Verification Code").fill(code ?? "");
 }
+
+/** New owner fills the 3-step onboarding wizard → lands on /owner. */
+export async function onboard(page: Page) {
+  const next = page.getByRole("button", { name: "Continue" });
+  await page.getByLabel("Brand Name").fill("Saffron Table");
+  await page.getByLabel("Legal Name").fill("Saffron Table Hospitality Pvt Ltd");
+  await next.click();
+  await page.getByLabel("Address").fill("12 Hill Road, Bandra West, Mumbai 400050");
+  await page.getByLabel("State").selectOption("27");
+  await next.click();
+  await page.getByRole("button", { name: "Finish Setup" }).click();
+  await expect(page).toHaveURL(/\/owner$/);
+}

@@ -14,7 +14,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import { useMenu } from "../hooks";
+import { useMenu, useRefreshMenu } from "../hooks";
+import { setStock } from "@/features/stock/api";
 import { AddOnGroupsSheet } from "./addon-groups-sheet";
 import { CategoriesSheet } from "./categories-sheet";
 import { DietMarker } from "./diet-marker";
@@ -42,6 +43,7 @@ const itemCount = (n: number) => `${n} ${n === 1 ? "item" : "items"}`;
 
 export function MenuManager({ outletId, initial }: { outletId: string; initial: OwnerMenu }) {
   const { data: menu } = useMenu(outletId, initial);
+  const refresh = useRefreshMenu(outletId);
   const [selected, setSelected] = useState<string | undefined>(menu.categories[0]?.id);
   const [open, setOpen] = useState<Open>(null);
 
@@ -150,11 +152,11 @@ export function MenuManager({ outletId, initial }: { outletId: string; initial: 
             ) : (
               <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
                 {items.map((item) => (
-                  <li key={item.id}>
+                  <li key={item.id} className="flex items-stretch">
                     <button
                       type="button"
                       onClick={() => setOpen({ kind: "item", item })}
-                      className="flex min-h-touch-staff w-full items-center gap-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                      className="flex min-h-touch-staff min-w-0 flex-1 items-center gap-3 py-3 pr-2 pl-4 text-left transition-colors duration-150 hover:bg-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
                     >
                       <DietMarker diet={item.dietType} className="mt-1 self-start" />
                       <span className="flex min-w-0 flex-1 flex-col">
@@ -181,6 +183,11 @@ export function MenuManager({ outletId, initial }: { outletId: string; initial: 
                           Hidden
                         </span>
                       )}
+                      {item.isActive && !item.inStock ? (
+                        <span className="shrink-0 rounded-full bg-destructive/10 px-2.5 py-0.5 text-xs font-semibold text-destructive">
+                          Out of stock
+                        </span>
+                      ) : null}
                       <span className="hidden shrink-0 text-base font-semibold tabular-nums sm:block">
                         {priceLabel(item)}
                       </span>
@@ -200,6 +207,10 @@ export function MenuManager({ outletId, initial }: { outletId: string; initial: 
                         aria-hidden="true"
                       />
                     </button>
+                    {/* One tap in/out of stock (M2-T4) — beside the row, not inside its button. */}
+                    {item.isActive ? (
+                      <StockSwitch outletId={outletId} item={item} onChanged={refresh} />
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -234,6 +245,58 @@ export function MenuManager({ outletId, initial }: { outletId: string; initial: 
           />
         ) : null}
       </Sheet>
+    </div>
+  );
+}
+
+/** Owner's one-tap stock switch on a menu row (optimistic; refreshes the menu after). */
+function StockSwitch({
+  outletId,
+  item,
+  onChanged,
+}: {
+  outletId: string;
+  item: MenuItem;
+  onChanged: () => Promise<unknown>;
+}) {
+  const [optimistic, setOptimistic] = useState<boolean | null>(null);
+  const [failed, setFailed] = useState(false);
+  const available = optimistic ?? item.inStock;
+  return (
+    <div className="flex shrink-0 items-center pr-3">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={available}
+        aria-label={`${item.name}: ${available ? "in stock" : "out of stock"}`}
+        title={failed ? "Couldn't save. Tap again." : undefined}
+        onClick={() => {
+          const next = !available;
+          setOptimistic(next);
+          setFailed(false);
+          setStock(item.id, next, outletId).then(
+            () => onChanged().finally(() => setOptimistic(null)),
+            () => {
+              setOptimistic(null);
+              setFailed(true);
+            },
+          );
+        }}
+        className={cn(
+          "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border-2 transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring motion-reduce:transition-none",
+          "before:absolute before:-inset-2.5 before:content-['']", // 44px+ hit area
+          available ? "border-success bg-success" : "border-input bg-muted",
+          failed && "border-destructive",
+        )}
+      >
+        <span
+          aria-hidden="true"
+          className={cn(
+            "size-5 rounded-full bg-background shadow transition-transform duration-150 motion-reduce:transition-none",
+            available ? "translate-x-5" : "translate-x-0.5",
+          )}
+        />
+      </button>
     </div>
   );
 }

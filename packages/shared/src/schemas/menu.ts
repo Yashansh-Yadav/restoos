@@ -238,3 +238,29 @@ export const importResultSchema = z.object({
   categoriesAdded: z.number().int(),
 });
 export type ImportResult = z.infer<typeof importResultSchema>;
+
+// ── Stock (M2-T4) ───────────────────────────────────────────────────────────
+
+/** GET /api/staff/menu/stock — visible items only, grouped by visible category. */
+export const stockListSchema = z.object({
+  categories: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      nameHi: z.string().nullable(),
+      items: z.array(
+        z.object({
+          id: z.string(),
+          name: z.string(),
+          nameHi: z.string().nullable(),
+          dietType: dietTypeSchema,
+          inStock: z.boolean(),
+        }),
+      ),
+    }),
+  ),
+});
+export type StockList = z.infer<typeof stockListSchema>;
+
+export const stockUpdateSchema = z.object({ inStock: z.boolean() });
+export const stockUpdateResponseSchema = z.object({ id: z.string(), inStock: z.boolean() });

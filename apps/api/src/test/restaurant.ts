@@ -12,7 +12,7 @@ export function browser(h: Harness) {
   return {
     jar,
     async call(
-      method: "GET" | "POST" | "PATCH",
+      method: "GET" | "POST" | "PATCH" | "PUT",
       url: string,
       payload?: object,
       ip = "198.51.100.1",

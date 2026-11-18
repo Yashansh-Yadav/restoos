@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import type {
   ImportPreview,
   ImportResult,
+  StockList,
   addOnGroupInputSchema,
   categoryInputSchema,
   categoryUpdateSchema,
@@ -433,4 +434,49 @@ export async function commitImport(
   await deps.db.menuImport.update({ where: { id }, data: { status: "COMMITTED" } });
   changed(deps);
   return result;
+}
+
+// ── Stock (M2-T4) ───────────────────────────────────────────────────────────
+
+/** Visible items of visible categories, for the one-tap stock screen. */
+export async function getStockList({ db, ctx }: MenuDeps): Promise<StockList> {
+  outletId(ctx);
+  const categories = await db.menuCategory.findMany({
+    where: { isActive: true },
+    select: {
+      id: true,
+      name: true,
+      nameHi: true,
+      items: {
+        where: { isActive: true },
+        select: { id: true, name: true, nameHi: true, dietType: true, inStock: true },
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      },
+    },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+  });
+  return { categories: categories.filter((c) => c.items.length > 0) };
+}
+
+/** In / out of stock. Idempotent; publishes menu.stockChanged (and menu.changed for caches). */
+export async function setStock(
+  deps: MenuDeps,
+  id: string,
+  inStock: boolean,
+): Promise<{ id: string; inStock: boolean }> {
+  const outlet = outletId(deps.ctx);
+  const found = await deps.db.menuItem.findUnique({ where: { id }, select: { id: true } });
+  if (!found) throw notFound("Item");
+  const row = await deps.db.menuItem.update({
+    where: { id },
+    data: { inStock },
+    select: { id: true, inStock: true },
+  });
+  deps.events.publishEvent(deps.ctx, "menu.stockChanged", {
+    outletId: outlet,
+    itemId: id,
+    inStock,
+  });
+  changed(deps);
+  return row;
 }

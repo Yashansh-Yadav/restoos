@@ -1,7 +1,8 @@
 "use client";
 
 import type { StaffMe } from "@restoos/shared";
-import { Clock, Loader2, LogOut, Play, Users } from "lucide-react";
+import { ChevronRight, Clock, Loader2, LogOut, PackageX, Play, Users } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api";
@@ -15,7 +16,7 @@ import { endShift, staffLogout, startShift } from "../api";
 const ROLE: Record<StaffMe["employee"]["role"], { label: string; coming: string[] }> = {
   BUTLER: { label: "Butler", coming: ["Your tables and orders", "Service bell alerts"] },
   CASHIER: { label: "Cashier", coming: ["Bills, payments and printing", "Service bell alerts"] },
-  KITCHEN: { label: "Kitchen", coming: ["Kitchen order tickets (KOT) board", "Item stock on/off"] },
+  KITCHEN: { label: "Kitchen", coming: ["Kitchen order tickets (KOT) board"] },
   MANAGER: {
     label: "Manager",
     coming: ["Floor and tables", "Orders, voids and discounts", "Bills and reports"],
@@ -77,6 +78,22 @@ export function StaffHome({ me }: { me: StaffMe }) {
           )}
         </div>
       </div>
+
+      {me.permissions.includes("menu.toggleStock") ? (
+        <Link
+          href="/staff/stock"
+          className="flex min-h-touch-hero [touch-action:manipulation] items-center gap-4 rounded-md border border-border px-4 py-3 transition-colors duration-150 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:bg-secondary"
+        >
+          <PackageX className="size-7 shrink-0" aria-hidden="true" />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="text-lg font-semibold">Item Stock</span>
+            <span className="text-sm text-muted-foreground">
+              Mark a dish out of stock in one tap
+            </span>
+          </span>
+          <ChevronRight className="size-6 shrink-0 text-muted-foreground" aria-hidden="true" />
+        </Link>
+      ) : null}
 
       <section
         aria-labelledby="coming-heading"

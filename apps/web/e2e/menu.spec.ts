@@ -1,5 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
-import { randomMobile, signInWithPhone } from "./helpers";
+import { expect, test } from "@playwright/test";
+import { onboard, randomMobile, signInWithPhone } from "./helpers";
 
 // M2-T1 acceptance: an owner builds a menu — category, item with sizes and a photo — edits the
 // price and hides the item.
@@ -9,18 +9,6 @@ const PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAACgAAAAoCAIAAAADnC86AAAACXBIWXMAAAPoAAAD6AG1e1JrAAAASklEQVRYhe3YsQ0AMAwCwczBIOxfMlZ2SJPmJPeWkM0Lzpovcywuqee44p3KQMYyAxKFxcBiYXGwGFgsLA4WpcUI5lVFTPmSZw0uFDHWWw5T+DoAAAAASUVORK5CYII=",
   "base64",
 );
-
-async function onboard(page: Page) {
-  const next = page.getByRole("button", { name: "Continue" });
-  await page.getByLabel("Brand Name").fill("Saffron Table");
-  await page.getByLabel("Legal Name").fill("Saffron Table Hospitality Pvt Ltd");
-  await next.click();
-  await page.getByLabel("Address").fill("12 Hill Road, Bandra West, Mumbai 400050");
-  await page.getByLabel("State").selectOption("27");
-  await next.click();
-  await page.getByRole("button", { name: "Finish Setup" }).click();
-  await expect(page).toHaveURL(/\/owner$/);
-}
 
 test("owner adds a category and an item with sizes and a photo, edits and hides it", async ({
   page,
@@ -70,7 +58,7 @@ test("owner adds a category and an item with sizes and a photo, edits and hides 
   // Saving = create + photo conversion (the first sharp run is slow on a cold server).
   await expect(sheet).toBeHidden({ timeout: 30_000 });
 
-  const row = page.getByRole("button", { name: /Paneer Tikka/ });
+  const row = page.getByRole("button", { name: /^Veg Paneer Tikka/ });
   await expect(row).toContainText("from ₹140");
   await expect(row.locator("img")).toHaveAttribute("src", /\/api\/files\/menu\/.+\.webp$/);
 
@@ -81,11 +69,20 @@ test("owner adds a category and an item with sizes and a photo, edits and hides 
   await edit.getByRole("button", { name: "Save Changes" }).click();
   await expect(row).toContainText("from ₹150");
 
+  // M2-T4: one tap out of stock, one tap back.
+  const stock = page.getByRole("switch", { name: /^Paneer Tikka:/ });
+  await expect(stock).toHaveAttribute("aria-checked", "true");
+  await stock.click();
+  await expect(row).toContainText("Out of stock");
+  await expect(stock).toHaveAttribute("aria-checked", "false");
+  await stock.click();
+  await expect(row).not.toContainText("Out of stock");
+
   // Hide it (behind a confirm).
   await row.click();
   await page.getByRole("button", { name: "Hide from Menu" }).click();
   await page.getByRole("button", { name: "Hide Paneer Tikka" }).click();
-  await expect(page.getByRole("button", { name: /Paneer Tikka/ })).toContainText("Hidden");
+  await expect(page.getByRole("button", { name: /^Veg Paneer Tikka/ })).toContainText("Hidden");
 });
 
 test("owner imports a menu from the Excel template (preview, then import)", async ({
@@ -115,6 +112,6 @@ test("owner imports a menu from the Excel template (preview, then import)", asyn
   const done = page.getByRole("dialog", { name: "Menu Imported" });
   await expect(done).toContainText("3 items added", { timeout: 30_000 });
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("button", { name: /Paneer Tikka/ })).toContainText("from ₹140");
+  await expect(page.getByRole("button", { name: /^Veg Paneer Tikka/ })).toContainText("from ₹140");
   await expect(page.getByRole("button", { name: /^Drinks/ })).toBeVisible();
 });

@@ -15,6 +15,9 @@ import {
   menuCategorySchema,
   menuItemSchema,
   ownerMenuSchema,
+  stockListSchema,
+  stockUpdateResponseSchema,
+  stockUpdateSchema,
 } from "@restoos/shared";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -61,6 +64,39 @@ export const menuRoutes =
         },
       },
       (request) => menu.getMenu(deps(request)),
+    );
+
+    // Stock (M2-T4): staff with menu.toggleStock (kitchen, cashier, manager) and owners.
+    const stockPreHandler = [
+      m.resolveTenant,
+      m.requirePermission("menu.toggleStock"),
+      m.requireOutlet,
+    ];
+    app.get(
+      "/staff/menu/stock",
+      {
+        preHandler: stockPreHandler,
+        schema: {
+          tags: tag,
+          summary: "Visible items with their stock state",
+          response: { 200: stockListSchema, ...errors },
+        },
+      },
+      (request) => menu.getStockList(deps(request)),
+    );
+    app.put(
+      "/staff/menu/items/:id/stock",
+      {
+        preHandler: stockPreHandler,
+        schema: {
+          tags: tag,
+          summary: "Mark an item in or out of stock (one tap)",
+          params: idParams,
+          body: stockUpdateSchema,
+          response: { 200: stockUpdateResponseSchema, ...errors },
+        },
+      },
+      (request) => menu.setStock(deps(request), request.params.id, request.body.inStock),
     );
 
     // Excel (M2-T2): the empty template, and the current menu for edit-and-re-import (M2-T3).
