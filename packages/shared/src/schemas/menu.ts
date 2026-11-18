@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { dietTypeSchema } from "../enums";
+import { dietTypeSchema, orderingModeSchema } from "../enums";
 import { GST_RATES_BPS, MAX_ADDONS_PER_GROUP, MAX_VARIANTS } from "../menu";
 
 // Menu editing (M2-T1). Same schemas validate the web forms and the API (rule 10).
@@ -264,3 +264,50 @@ export type StockList = z.infer<typeof stockListSchema>;
 
 export const stockUpdateSchema = z.object({ inStock: z.boolean() });
 export const stockUpdateResponseSchema = z.object({ id: z.string(), inStock: z.boolean() });
+
+// ── Customer menu (M2-T5) ───────────────────────────────────────────────────
+
+/** Table QR tokens: random base64url (seed/M3-T2 generate 22 chars). */
+export const QR_TOKEN_FORMAT = /^[A-Za-z0-9_-]{16,64}$/;
+
+export const publicMenuItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  nameHi: z.string().nullable(),
+  description: z.string().nullable(),
+  dietType: dietTypeSchema,
+  /** Paise per unit; the smallest size's price when the item has sizes. */
+  price: z.number().int(),
+  variants: z.array(z.object({ id: z.string(), name: z.string(), price: z.number().int() })),
+  addOnGroupIds: z.array(z.string()),
+  imageUrl: z.string().nullable(),
+  /** Out-of-stock dishes stay listed (greyed out) — DESIGN.md §5. */
+  inStock: z.boolean(),
+});
+
+export const publicOutletMenuSchema = z.object({
+  outlet: z.object({
+    name: z.string(),
+    orderingMode: orderingModeSchema,
+    pricesIncludeTax: z.boolean(),
+    googleReviewUrl: z.string().nullable(),
+  }),
+  menu: z.object({
+    categories: z.array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        nameHi: z.string().nullable(),
+        items: z.array(publicMenuItemSchema),
+      }),
+    ),
+    addOnGroups: z.array(addOnGroupSchema),
+  }),
+});
+export type PublicOutletMenu = z.infer<typeof publicOutletMenuSchema>;
+
+/** GET /api/public/table/:qrToken — what the customer page renders. */
+export const publicMenuSchema = publicOutletMenuSchema.extend({
+  table: z.object({ label: z.string() }),
+});
+export type PublicMenu = z.infer<typeof publicMenuSchema>;

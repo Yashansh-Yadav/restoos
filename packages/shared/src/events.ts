@@ -6,6 +6,8 @@ export type OutletEvents = {
   "menu.changed": { outletId: string };
   /** One item went in or out of stock (M2-T4). */
   "menu.stockChanged": { outletId: string; itemId: string; inStock: boolean };
+  /** Outlet settings changed (ordering mode, shift auto-start…) — busts the customer menu. */
+  "outlet.settingsChanged": { outletId: string };
 };
 
 export type OutletEventName = keyof OutletEvents;

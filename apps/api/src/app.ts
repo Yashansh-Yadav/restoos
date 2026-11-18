@@ -9,6 +9,7 @@ import {
 import type { Auth } from "./lib/auth";
 import { createEventBus, type EventBus } from "./lib/events";
 import { createIdentityService } from "./lib/identity";
+import { createPublicMenu } from "./lib/public-menu";
 import { createOnboardingService } from "./lib/onboarding";
 import { REQUEST_ID_HEADER, requestIdOptions } from "./lib/logger";
 import type { ConsoleOtpProvider } from "./lib/otp/provider";
@@ -24,6 +25,7 @@ import { meRoutes } from "./modules/me/routes";
 import { buildModuleDeps } from "./module-deps";
 import { onboardingRoutes } from "./modules/onboarding/routes";
 import { outletSettingsRoutes } from "./modules/outlet-settings/routes";
+import { publicRoutes } from "./modules/public/routes";
 import { staffRoutes } from "./modules/staff/routes";
 import { registerAuthHandler } from "./plugins/auth";
 import { registerDocs } from "./plugins/docs";
@@ -112,6 +114,23 @@ export async function buildApp(options: BuildAppOptions = {}) {
         await api.register(deviceAuthRoutes(moduleDeps));
         await api.register(outletSettingsRoutes(moduleDeps));
         await api.register(menuRoutes(moduleDeps));
+
+        // Customer menu (M2-T5): cached per outlet, busted by any menu/stock/settings change.
+        const publicMenu = createPublicMenu({
+          prisma: deps.prisma,
+          redis: deps.redis,
+          log: (event, data) => app.log.warn({ event, ...data }, event),
+        });
+        events.subscribe((_ctx, e) => {
+          if (
+            e.name === "menu.changed" ||
+            e.name === "menu.stockChanged" ||
+            e.name === "outlet.settingsChanged"
+          ) {
+            return publicMenu.bust(e.payload.outletId);
+          }
+        });
+        await api.register(publicRoutes({ publicMenu }));
         if (deps.storage.servesFiles) await api.register(fileRoutes(deps.storage));
         if (deps.devOtp && process.env.NODE_ENV !== "production") {
           await api.register(devRoutes(deps.devOtp));

@@ -58,6 +58,8 @@ export const outletSettingsRoutes =
         if (!before) throw notFound("Outlet");
         const after = await db.outlet.update({ where: { id }, data: request.body, select });
         await writeAudit(db, ctx, "outlet.settingsChanged", "Outlet", id, { before, after });
+        // Ordering mode etc. are part of the customer menu (M2-T5): bust its cache.
+        await m.events.publishEvent(ctx, "outlet.settingsChanged", { outletId: id });
         return after;
       },
     );

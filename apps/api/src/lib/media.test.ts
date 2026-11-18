@@ -93,9 +93,13 @@ describe("event bus", () => {
     const off = bus.subscribe((_ctx, e) => {
       seen.push(e);
     });
-    bus.publishEvent(ctx, "menu.stockChanged", { outletId: "x", itemId: "i", inStock: false });
+    await bus.publishEvent(ctx, "menu.stockChanged", {
+      outletId: "x",
+      itemId: "i",
+      inStock: false,
+    });
     off();
-    bus.publishEvent(ctx, "menu.changed", { outletId: "x" });
+    await bus.publishEvent(ctx, "menu.changed", { outletId: "x" });
     await Promise.resolve();
     expect(seen).toEqual([
       { name: "menu.stockChanged", payload: { outletId: "x", itemId: "i", inStock: false } },

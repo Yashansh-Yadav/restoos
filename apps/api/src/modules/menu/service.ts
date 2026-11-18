@@ -42,6 +42,7 @@ function outletId(ctx: TenantContext): string {
   return ctx.outletId;
 }
 
+/** Announce a menu change (awaited: the customer-menu cache is busted before we reply). */
 const changed = (deps: MenuDeps) =>
   deps.events.publishEvent(deps.ctx, "menu.changed", { outletId: outletId(deps.ctx) });
 
@@ -116,7 +117,7 @@ export async function createCategory(deps: MenuDeps, input: CategoryInput) {
     },
     select: { id: true, name: true, nameHi: true, sortOrder: true, isActive: true },
   });
-  changed(deps);
+  await changed(deps);
   return row;
 }
 
@@ -128,7 +129,7 @@ export async function updateCategory(deps: MenuDeps, id: string, input: Category
     data: input,
     select: { id: true, name: true, nameHi: true, sortOrder: true, isActive: true },
   });
-  changed(deps);
+  await changed(deps);
   return row;
 }
 
@@ -142,7 +143,7 @@ export async function reorderCategories(deps: MenuDeps, ids: string[]): Promise<
       deps.db.menuCategory.update({ where: { id }, data: { sortOrder } }),
     ),
   );
-  changed(deps);
+  await changed(deps);
 }
 
 // ── Add-on groups ───────────────────────────────────────────────────────────
@@ -170,7 +171,7 @@ export async function createAddOnGroup(deps: MenuDeps, input: GroupInput) {
     },
     select: groupSelect,
   });
-  changed(deps);
+  await changed(deps);
   return row;
 }
 
@@ -191,7 +192,7 @@ export async function updateAddOnGroup(deps: MenuDeps, id: string, input: GroupI
       select: groupSelect,
     });
   });
-  changed(deps);
+  await changed(deps);
   return row;
 }
 
@@ -199,7 +200,7 @@ export async function deleteAddOnGroup(deps: MenuDeps, id: string): Promise<void
   const found = await deps.db.addOnGroup.findUnique({ where: { id }, select: { id: true } });
   if (!found) throw notFound("Add-on group");
   await deps.db.addOnGroup.delete({ where: { id } }); // add-ons and item links cascade
-  changed(deps);
+  await changed(deps);
 }
 
 // ── Items ───────────────────────────────────────────────────────────────────
@@ -256,7 +257,7 @@ export async function createItem(deps: MenuDeps, input: ItemInput): Promise<Menu
       },
       select: itemSelect,
     });
-    changed(deps);
+    await changed(deps);
     return toItem(row);
   } catch (err) {
     if (isUniqueViolation(err)) throw codeTaken();
@@ -290,7 +291,7 @@ export async function updateItem(deps: MenuDeps, id: string, input: ItemUpdate):
         select: itemSelect,
       });
     });
-    changed(deps);
+    await changed(deps);
     return toItem(row);
   } catch (err) {
     if (isUniqueViolation(err)) throw codeTaken();
@@ -315,7 +316,7 @@ export async function setItemImage(deps: MenuDeps, id: string, upload: Buffer): 
   });
   const old = keyFromPublicUrl(item.imageUrl);
   if (old) await storage.delete(old);
-  changed(deps);
+  await changed(deps);
   return toItem(row);
 }
 
@@ -330,7 +331,7 @@ export async function removeItemImage(deps: MenuDeps, id: string): Promise<MenuI
   });
   const old = keyFromPublicUrl(item.imageUrl);
   if (old) await storage.delete(old);
-  changed(deps);
+  await changed(deps);
   return toItem(row);
 }
 
@@ -432,7 +433,7 @@ export async function commitImport(
   }
   const result = await applyImport(deps.db, deps.ctx, outletId(deps.ctx), plan);
   await deps.db.menuImport.update({ where: { id }, data: { status: "COMMITTED" } });
-  changed(deps);
+  await changed(deps);
   return result;
 }
 
@@ -472,11 +473,11 @@ export async function setStock(
     data: { inStock },
     select: { id: true, inStock: true },
   });
-  deps.events.publishEvent(deps.ctx, "menu.stockChanged", {
+  await deps.events.publishEvent(deps.ctx, "menu.stockChanged", {
     outletId: outlet,
     itemId: id,
     inStock,
   });
-  changed(deps);
+  await changed(deps);
   return row;
 }

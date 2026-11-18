@@ -1,10 +1,12 @@
 import type { OutletEvent, OutletEventName, OutletEvents } from "@restoos/shared";
 import type { TenantContext } from "./tenant";
 
-// publishEvent() (plan §8). Routes call it after a successful write with a typed event from
-// packages/shared/src/events.ts. Until M4 attaches Socket.io (and the M2-T5 menu cache listens),
-// nothing is subscribed, so it's a no-op — but every call site is already in place.
-// Listeners must never break the write that triggered them: their errors are reported, not thrown.
+// publishEvent() (plan §8). Routes await it after a successful write with a typed event from
+// packages/shared/src/events.ts. Listeners today: the customer-menu cache (M2-T5); M4 attaches
+// Socket.io. Awaiting means the response goes out only after caches are busted, so a reader
+// right after a change never sees the old menu.
+// Listeners must never break the write that triggered them: their errors are reported, never
+// thrown, and the returned promise always resolves.
 
 export type EventListener = (ctx: TenantContext, event: OutletEvent) => void | Promise<void>;
 
@@ -13,7 +15,7 @@ export type EventBus = {
     ctx: TenantContext,
     name: K,
     payload: OutletEvents[K],
-  ): void;
+  ): Promise<void>;
   /** Returns an unsubscribe function. */
   subscribe(listener: EventListener): () => void;
 };
@@ -23,15 +25,16 @@ export function createEventBus(
 ): EventBus {
   const listeners = new Set<EventListener>();
   return {
-    publishEvent(ctx, name, payload) {
+    async publishEvent(ctx, name, payload) {
       const event = { name, payload } as OutletEvent;
-      for (const listener of listeners) {
+      const runs = [...listeners].map(async (listener) => {
         try {
-          void Promise.resolve(listener(ctx, event)).catch(onListenerError);
+          await listener(ctx, event);
         } catch (err) {
           onListenerError(err);
         }
-      }
+      });
+      await Promise.all(runs);
     },
     subscribe(listener) {
       listeners.add(listener);
