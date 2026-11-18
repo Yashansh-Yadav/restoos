@@ -10,6 +10,7 @@ import {
 import { createAudit } from "./audit";
 import { AppError } from "./errors";
 import type { Redis } from "./redis";
+import { carryOverAssignments } from "./assignments";
 import { ensureShift, openShift } from "./shifts";
 import { createTenantDbFactory, type TenantContext } from "./tenant";
 
@@ -139,7 +140,16 @@ export function createStaffAuth({
         endedAt: result.autoClosed.endedAt.toISOString(),
       });
     }
-    if (result.started) await audit(ctx, "shift.start", "Shift", result.shift.id, { auto });
+    if (result.started) {
+      await audit(ctx, "shift.start", "Shift", result.shift.id, { auto });
+      if (e.role === "BUTLER") {
+        // Yesterday's tables by default (M3-T3). Best effort: never blocks signing in (rule 5).
+        await carryOverAssignments(getTenantDb(ctx), ctx, e.id, result.shift.id).catch(
+          (err: unknown) =>
+            log("assignment.carry_over_failed", { employeeId: e.id, err: String(err) }),
+        );
+      }
+    }
     return result.shift;
   }
 

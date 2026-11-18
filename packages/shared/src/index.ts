@@ -12,6 +12,7 @@ export * from "./menu";
 export * from "./menu-import";
 export * from "./money";
 export * from "./permissions";
+export * from "./schemas/assignments";
 export * from "./schemas/auth";
 export * from "./schemas/billing";
 export * from "./schemas/device";

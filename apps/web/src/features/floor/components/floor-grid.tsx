@@ -21,6 +21,8 @@ export function FloorGrid({
   onKeyMove,
   tileClassName,
   tileExtra,
+  tileLabel,
+  isPressed,
 }: {
   tables: GridTable[];
   selectedId?: string | null;
@@ -31,6 +33,10 @@ export function FloorGrid({
   onKeyMove?: (id: string, dx: number, dy: number) => void;
   tileClassName?: (t: GridTable) => string | undefined;
   tileExtra?: (t: GridTable) => ReactNode;
+  /** Extra words for the tile's accessible name (e.g. who looks after it). */
+  tileLabel?: (t: GridTable) => string;
+  /** Toggle state per tile when "pressed" means more than "selected" (assignment board). */
+  isPressed?: (t: GridTable) => boolean;
 }) {
   const gridRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ id: string; x: number; y: number; moved: boolean } | null>(null);
@@ -135,12 +141,13 @@ export function FloorGrid({
                 setHover(null);
               }}
               onClick={(e) => {
-                // Pointer taps are handled on pointer-up; keyboard Enter/Space lands here.
-                if (e.detail === 0) onSelect?.(t.id);
+                // Editor: pointer taps are handled on pointer-up (to tell them from drags), so only
+                // keyboard Enter/Space lands here. Read-only grids: every click is a tap.
+                if (!editable || e.detail === 0) onSelect?.(t.id);
               }}
               onKeyDown={(e) => onKeyDown(e, t.id)}
-              aria-pressed={onSelect ? selected : undefined}
-              aria-label={`Table ${t.label}, ${t.seats} seats${editable ? `, row ${t.posY + 1} column ${t.posX + 1}` : ""}`}
+              aria-pressed={onSelect ? (isPressed ? isPressed(t) : selected) : undefined}
+              aria-label={`Table ${t.label}, ${t.seats} seats${editable ? `, row ${t.posY + 1} column ${t.posX + 1}` : ""}${tileLabel ? `, ${tileLabel(t)}` : ""}`}
               className={cn(
                 "absolute top-0 left-0 flex flex-col items-center justify-center gap-0.5 rounded-md border-2 bg-background select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                 // Editor: tiles capture touch for dragging; read-only grids keep normal scrolling.

@@ -1,7 +1,16 @@
 "use client";
 
 import type { StaffMe } from "@restoos/shared";
-import { ChevronRight, Clock, Loader2, LogOut, PackageX, Play, Users } from "lucide-react";
+import {
+  ChevronRight,
+  Clock,
+  LayoutGrid,
+  Loader2,
+  LogOut,
+  PackageX,
+  Play,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -78,6 +87,22 @@ export function StaffHome({ me }: { me: StaffMe }) {
           )}
         </div>
       </div>
+
+      {me.permissions.includes("table.assign") ? (
+        <Link
+          href="/staff/assign"
+          className="flex min-h-touch-hero [touch-action:manipulation] items-center gap-4 rounded-md border border-border px-4 py-3 transition-colors duration-150 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:bg-secondary"
+        >
+          <LayoutGrid className="size-7 shrink-0" aria-hidden="true" />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="text-lg font-semibold">Assign Tables</span>
+            <span className="text-sm text-muted-foreground">
+              Give butlers their tables for this shift
+            </span>
+          </span>
+          <ChevronRight className="size-6 shrink-0 text-muted-foreground" aria-hidden="true" />
+        </Link>
+      ) : null}
 
       {me.permissions.includes("menu.toggleStock") ? (
         <Link

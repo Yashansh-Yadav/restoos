@@ -10,6 +10,8 @@ export type OutletEvents = {
   "outlet.settingsChanged": { outletId: string };
   /** Sections or tables were added, edited, moved or removed (M3-T1). */
   "floor.changed": { outletId: string };
+  /** Butlers were given or taken off tables (M3-T3). */
+  "assignment.changed": { outletId: string };
 };
 
 export type OutletEventName = keyof OutletEvents;

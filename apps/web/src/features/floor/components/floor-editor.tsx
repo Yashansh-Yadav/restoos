@@ -12,7 +12,9 @@ import {
   Plus,
   QrCode,
   Rows3,
+  UserRound,
 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
@@ -112,6 +114,14 @@ export function FloorEditor({ outletId, initial }: { outletId: string; initial: 
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {floor.sections.some((s) => s.tables.length > 0) ? (
+            <Button asChild variant="secondary" size="sm">
+              <Link href={`/owner/floor/assign?outlet=${encodeURIComponent(outletId)}`}>
+                <UserRound aria-hidden="true" />
+                Assign Butlers
+              </Link>
+            </Button>
+          ) : null}
           {floor.sections.some((s) => s.tables.length > 0) ? (
             <Button variant="secondary" size="sm" onClick={() => setOpen({ kind: "print" })}>
               <QrCode aria-hidden="true" />
