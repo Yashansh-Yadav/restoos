@@ -54,6 +54,8 @@ export function StockBoard({ initial }: { initial: StockList }) {
   async function toggle(id: string) {
     const next = !stock[id];
     setFailed(null);
+    // A live refresh already on its way would bring back the old state over this tap.
+    void client.cancelQueries({ queryKey: stockKey });
     const flip = (inStock: boolean) =>
       client.setQueryData<StockList>(stockKey, (prev) =>
         prev

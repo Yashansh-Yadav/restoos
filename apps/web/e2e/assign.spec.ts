@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { onboard, randomMobile, signInWithPhone } from "./helpers";
+import { hydrated, onboard, randomMobile, signInWithPhone } from "./helpers";
 
 // M3-T3 acceptance: a butler on shift gets tables with one tap each (tap butler → tap tables).
 
@@ -72,11 +72,16 @@ test("owner gives an on-shift butler their tables", async ({ page, request, brow
     await page.reload();
     await expect(tile("T2")).toHaveAccessibleName(/with Rahul$/, { timeout: 2_000 });
   }).toPass({ timeout: 20_000 });
-  // (Retried: a tap right after the reload can land before the page is interactive.)
-  await expect(async () => {
-    await tile("T2").click({ timeout: 2_000 });
-    await expect(tile("T2")).toHaveAccessibleName(/free$/, { timeout: 2_000 });
-  }).toPass({ timeout: 20_000 });
+  // Wait until the page is interactive, and for the save to land before reloading (a reload
+  // would cancel the request).
+  await hydrated(page, "h1");
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.url().includes("/api/staff/assignments/tables/") && r.request().method() === "PUT",
+    ),
+    tile("T2").click(),
+  ]);
+  await expect(tile("T2")).toHaveAccessibleName(/free$/);
   await page.reload();
   await expect(tile("T1")).toHaveAccessibleName(/with Rahul$/);
   await expect(tile("T2")).toHaveAccessibleName(/free$/);

@@ -46,6 +46,8 @@ export function AssignBoard({
   /** Optimistic: show the change now, roll back with a message if the save fails. */
   function patch(tableIds: string[], to: string | null) {
     const ids = new Set(tableIds);
+    // A live refresh already on its way would bring back the old state over this tap.
+    void client.cancelQueries({ queryKey: key });
     client.setQueryData<AssignmentBoard>(key, (prev) =>
       prev
         ? {

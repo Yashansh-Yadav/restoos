@@ -87,3 +87,10 @@ export async function signedInTablet(page: Page, browser: Browser, name: string,
 /** A floor tile by table label (FloorGrid's accessible name starts "Table T1,"). */
 export const tableTile = (page: Page, label: string) =>
   page.getByRole("button", { name: new RegExp(`^Table ${label},`) });
+
+/** Waits until React has hydrated the page, so a tap isn't lost on server-rendered HTML. */
+export const hydrated = (page: Page, selector: string) =>
+  page.waitForFunction((sel) => {
+    const el = document.querySelector(sel);
+    return el !== null && Object.keys(el).some((k) => k.startsWith("__reactFiber"));
+  }, selector);

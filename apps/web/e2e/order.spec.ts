@@ -1,7 +1,8 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import {
   addStaffMember,
   addTables,
+  hydrated,
   onboard,
   randomMobile,
   signedInTablet,
@@ -11,13 +12,6 @@ import {
 
 // M5-T1 acceptance: an order of 3 simple items for a table = table tap + 3 item taps + Send,
 // counted with a click counter that survives page navigations.
-
-/** Waits until React has hydrated the page, so a tap isn't lost on server-rendered HTML. */
-const hydrated = (page: Page, selector: string) =>
-  page.waitForFunction((sel) => {
-    const el = document.querySelector(sel);
-    return el !== null && Object.keys(el).some((k) => k.startsWith("__reactFiber"));
-  }, selector);
 
 test("butler takes an order in 5 taps", async ({ page, request, browser }) => {
   await signInWithPhone(page, request, randomMobile());
