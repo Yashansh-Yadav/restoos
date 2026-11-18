@@ -11,6 +11,7 @@ import {
   type tableUpdateSchema,
 } from "@restoos/shared";
 import type { z } from "zod";
+import { writeAudit } from "../../lib/audit";
 import { AppError, notFound } from "../../lib/errors";
 import type { EventBus } from "../../lib/events";
 import type { TenantContext, TenantDb } from "../../lib/tenant";
@@ -32,6 +33,7 @@ const tableSelect = {
   posX: true,
   posY: true,
   status: true,
+  qrToken: true,
 } as const;
 const cell = (x: number, y: number) => `${x}:${y}`;
 const qrToken = () => randomBytes(16).toString("base64url");
@@ -336,4 +338,66 @@ export async function deleteTable(deps: FloorDeps, id: string): Promise<void> {
     await tx.diningTable.delete({ where: { id } });
   });
   await changed(deps);
+}
+
+// ── QR codes (M3-T2) ────────────────────────────────────────────────────────
+
+/** New QR token for one table: the old printed card stops working at once (lookup is uncached). */
+export async function rotateQr(deps: FloorDeps, id: string): Promise<FloorTable> {
+  const { db, ctx } = deps;
+  if (!(await db.diningTable.findUnique({ where: { id }, select: { id: true } })))
+    throw notFound("Table");
+  const table = await db.$transaction(async (tx) => {
+    const row = await tx.diningTable.update({
+      where: { id },
+      data: { qrToken: qrToken() },
+      select: tableSelect,
+    });
+    await writeAudit(tx, ctx, "table.rotateQr", "DiningTable", id, { label: row.label });
+    return row;
+  });
+  await changed(deps);
+  return table;
+}
+
+export type QrCard = { label: string; section: string; qrToken: string };
+
+/** Cards to print: every table, one section's, or one table's — in floor order. */
+export async function qrCardsFor(
+  { db, ctx }: FloorDeps,
+  filter: { sectionId?: string | undefined; tableId?: string | undefined },
+): Promise<{ outletName: string; cards: QrCard[] }> {
+  const outlet = await db.outlet.findUnique({
+    where: { id: outletId(ctx) },
+    select: { name: true },
+  });
+  if (filter.sectionId) await assertSection(db, filter.sectionId);
+  const tables = await db.diningTable.findMany({
+    where: {
+      ...(filter.sectionId ? { sectionId: filter.sectionId } : {}),
+      ...(filter.tableId ? { id: filter.tableId } : {}),
+    },
+    select: {
+      label: true,
+      qrToken: true,
+      posX: true,
+      posY: true,
+      section: { select: { name: true, sortOrder: true } },
+    },
+  });
+  if (filter.tableId && tables.length === 0) throw notFound("Table");
+  if (tables.length === 0) {
+    throw new AppError(409, "NO_TABLES", "There are no tables to print yet. Add tables first.");
+  }
+  tables.sort(
+    (a, b) =>
+      a.section.sortOrder - b.section.sortOrder ||
+      a.section.name.localeCompare(b.section.name) ||
+      a.posY - b.posY ||
+      a.posX - b.posX,
+  );
+  return {
+    outletName: outlet?.name ?? "",
+    cards: tables.map((t) => ({ label: t.label, section: t.section.name, qrToken: t.qrToken })),
+  };
 }

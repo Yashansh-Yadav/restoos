@@ -207,4 +207,58 @@ describe("/api/owner/floor", () => {
       "NOT_FOUND",
     );
   });
+
+  it("prints QR cards and rotates one table's code (old link dies at once, audited)", async () => {
+    const { r, api, section } = await setup();
+    const empty = await api("GET", "/qr-cards.pdf");
+    expect([empty.statusCode, code(empty)]).toEqual([409, "NO_TABLES"]);
+
+    const hall = await section("Main Hall");
+    const terrace = await section("Terrace");
+    const { tables } = bulkResult.parse(
+      (
+        await api("POST", "/tables/bulk", { sectionId: hall.id, prefix: "T", from: "1", to: 7 })
+      ).json(),
+    );
+    await api("POST", "/tables", { sectionId: terrace.id, label: "R1" });
+    const pages = (res: LightMyRequestResponse) =>
+      (res.rawPayload.toString("latin1").match(/\/Type\s*\/Page\b/g) ?? []).length;
+
+    const all = await api("GET", "/qr-cards.pdf");
+    expect(all.statusCode, all.body).toBe(200);
+    expect(all.headers["content-type"]).toBe("application/pdf");
+    expect(all.headers["content-disposition"]).toBe('attachment; filename="table-qr-codes.pdf"');
+    expect(all.rawPayload.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(pages(all)).toBe(2); // 8 cards, 6 per page
+    expect(pages(await api("GET", `/qr-cards.pdf?sectionId=${terrace.id}`))).toBe(1);
+    const t2 = tables[1];
+    if (!t2) throw new Error("bulk add returned too few tables");
+    const one = await api("GET", `/qr-cards.pdf?tableId=${t2.id}`);
+    expect(one.headers["content-disposition"]).toBe('attachment; filename="table-T2-qr.pdf"');
+    expect(code(await api("GET", "/qr-cards.pdf?sectionId=nope"))).toBe("NOT_FOUND");
+
+    // Rotate T2: new token, the old customer link 404s, the new one works.
+    const publicTable = (token: string) =>
+      h.app.inject({ method: "GET", url: `/api/public/table/${token}` });
+    expect((await publicTable(t2.qrToken)).statusCode).toBe(200);
+    const rotated = await api("POST", `/tables/${t2.id}/rotate-qr`);
+    expect(rotated.statusCode, rotated.body).toBe(200);
+    const fresh = floorTableSchema.parse(rotated.json());
+    expect(fresh.qrToken).not.toBe(t2.qrToken);
+    expect(fresh.qrToken).toMatch(/^[A-Za-z0-9_-]{22}$/);
+    expect((await publicTable(t2.qrToken)).statusCode).toBe(404);
+    expect((await publicTable(fresh.qrToken)).statusCode).toBe(200);
+    const audit = await h.prisma.auditLog.findMany({ where: { action: "table.rotateQr" } });
+    expect(audit.map((a) => [a.entityId, a.outletId, a.actorType])).toEqual([
+      [t2.id, r.outletId, "OWNER"],
+    ]);
+
+    // Cashiers can't print or rotate.
+    const priya = await r.addStaff("Priya", "CASHIER", "4827");
+    const cashier = await r.signedInTablet(priya.id, "4827");
+    expect((await cashier.call("GET", "/api/owner/floor/qr-cards.pdf")).statusCode).toBe(403);
+    expect(
+      (await cashier.call("POST", `/api/owner/floor/tables/${t2.id}/rotate-qr`)).statusCode,
+    ).toBe(403);
+  });
 });

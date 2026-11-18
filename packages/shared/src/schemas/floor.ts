@@ -106,6 +106,8 @@ export const floorTableSchema = z.object({
   posX: z.number().int(),
   posY: z.number().int(),
   status: tableStatusSchema,
+  /** Owner screens only: the customer link is /t/{qrToken} (M3-T2 prints and rotates it). */
+  qrToken: z.string(),
 });
 export type FloorTable = z.infer<typeof floorTableSchema>;
 

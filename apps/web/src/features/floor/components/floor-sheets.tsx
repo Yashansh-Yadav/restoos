@@ -8,7 +8,16 @@ import {
   type FloorSection,
   type FloorTable,
 } from "@restoos/shared";
-import { ArrowDown, ArrowUp, Loader2, Plus, Trash2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Download,
+  Loader2,
+  Plus,
+  QrCode,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 import { useId, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -544,6 +553,8 @@ export function TableSheet({
         </Button>
       </form>
 
+      <QrBlock outletId={outletId} table={table} />
+
       <div className="mt-6 border-t border-border pt-6">
         {confirmDelete ? (
           <div
@@ -590,5 +601,160 @@ export function TableSheet({
         )}
       </div>
     </SheetContent>
+  );
+}
+
+// ── QR codes (M3-T2) ────────────────────────────────────────────────────────
+
+const linkClass =
+  "flex min-h-touch-staff items-center gap-3 rounded-md border border-border px-4 py-3 transition-colors duration-150 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
+
+function PdfLink({ href, title, hint }: { href: string; title: string; hint: string }) {
+  return (
+    <a href={href} download className={linkClass}>
+      <QrCode className="size-6 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="text-base font-semibold">{title}</span>
+        <span className="text-sm text-pretty text-muted-foreground tabular-nums">{hint}</span>
+      </span>
+      <Download className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+    </a>
+  );
+}
+
+const cards = (n: number) => `${n} ${n === 1 ? "card" : "cards"}`;
+const pages = (n: number) => {
+  const p = Math.ceil(n / 6);
+  return `${p} A4 ${p === 1 ? "page" : "pages"}`;
+};
+
+/** "Print QR Codes": all tables, the open section, or the selected table. */
+export function PrintSheet({
+  outletId,
+  sections,
+  activeSection,
+  selected,
+}: {
+  outletId: string;
+  sections: FloorSection[];
+  activeSection: FloorSection | undefined;
+  selected: FloorTable | null;
+}) {
+  const total = sections.reduce((n, s) => n + s.tables.length, 0);
+  return (
+    <SheetContent
+      title="Print QR Codes"
+      description="Each table gets a card with its own QR code. Guests scan it to see the menu and call staff."
+    >
+      <div className="flex flex-col gap-3 pt-2">
+        <PdfLink
+          href={api.qrCardsHref(outletId)}
+          title={`All Tables (${total})`}
+          hint={`${cards(total)} on ${pages(total)}`}
+        />
+        {activeSection && sections.length > 1 && activeSection.tables.length > 0 ? (
+          <PdfLink
+            href={api.qrCardsHref(outletId, { sectionId: activeSection.id })}
+            title={`${activeSection.name} (${activeSection.tables.length})`}
+            hint={`${cards(activeSection.tables.length)} on ${pages(activeSection.tables.length)}`}
+          />
+        ) : null}
+        {selected ? (
+          <PdfLink
+            href={api.qrCardsHref(outletId, { tableId: selected.id })}
+            title={`Only ${selected.label}`}
+            hint="1 card"
+          />
+        ) : null}
+        <p className="pt-2 text-sm text-pretty text-muted-foreground">
+          Print on A4 at 100% size and cut along the dashed lines. Laminate the cards so they last.
+        </p>
+      </div>
+    </SheetContent>
+  );
+}
+
+/** In the table sheet: the table's link, its card, and "Get New QR Code". */
+function QrBlock({ outletId, table }: { outletId: string; table: FloorTable }) {
+  const headingId = useId();
+  const refresh = useRefreshFloor(outletId);
+  const [token, setToken] = useState(table.qrToken);
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [rotated, setRotated] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function rotate() {
+    setBusy(true);
+    setError(null);
+    try {
+      const fresh = await api.rotateQr(outletId, table.id);
+      setToken(fresh.qrToken);
+      setRotated(true);
+      setConfirm(false);
+      await refresh();
+    } catch (err) {
+      setError(floorError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section
+      className="mt-6 flex flex-col gap-3 border-t border-border pt-6"
+      aria-labelledby={headingId}
+    >
+      <h3 id={headingId} className="text-base font-semibold">
+        QR Code
+      </h3>
+      <p className="text-sm text-muted-foreground">
+        Guest link:{" "}
+        <span className="font-mono break-all text-body" translate="no" data-testid="qr-link">
+          /t/{token}
+        </span>
+      </p>
+      {rotated ? (
+        <p role="status" className="text-sm font-medium text-success">
+          New code ready — print the card again.
+        </p>
+      ) : null}
+      <PdfLink
+        href={api.qrCardsHref(outletId, { tableId: table.id })}
+        title={`Download Card for ${table.label}`}
+        hint="1 card, A4"
+      />
+      {error ? (
+        <p role="alert" className="text-sm font-medium text-destructive">
+          {error}
+        </p>
+      ) : null}
+      {confirm ? (
+        <div
+          className="flex flex-col gap-3 rounded-md border border-border p-4"
+          role="group"
+          aria-label="Confirm new QR code"
+        >
+          <p className="text-sm text-body">
+            The printed card for {table.label} will stop working right away. Print the new card
+            after this.
+          </p>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="secondary" onClick={() => setConfirm(false)}>
+              Cancel
+            </Button>
+            <Button disabled={busy} onClick={() => void rotate()}>
+              {busy ? <Loader2 className="animate-spin" aria-hidden="true" /> : null}
+              {busy ? "Changing…" : "Change QR Code"}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button variant="secondary" onClick={() => setConfirm(true)}>
+          <RefreshCw aria-hidden="true" />
+          Get New QR Code
+        </Button>
+      )}
+    </section>
   );
 }

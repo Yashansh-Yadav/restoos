@@ -1,9 +1,11 @@
+import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import { onboard, randomMobile, signInWithPhone } from "./helpers";
 
 // M3-T1 acceptance: owner sets up a section, bulk-adds tables, arranges and edits them.
+// M3-T2: prints the QR cards and gives one table a new code.
 
-test("owner sets up the floor: section, bulk tables, layout, edit", async ({ page, request }) => {
+test("owner sets up the floor: section, bulk tables, layout, edit, QR cards", async ({ page, request }) => {
   await signInWithPhone(page, request, randomMobile());
   await expect(page).toHaveURL(/\/onboarding$/);
   await onboard(page);
@@ -32,7 +34,9 @@ test("owner sets up the floor: section, bulk tables, layout, edit", async ({ pag
   for (const label of ["T1", "T2", "T3", "T4", "T5", "T6"]) {
     await expect(page.getByRole("button", { name: new RegExp(`^Table ${label},`) })).toBeVisible();
   }
-  await expect(page.getByRole("button", { name: /^Table T1, 4 seats, row 1 column 1$/ })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /^Table T1, 4 seats, row 1 column 1$/ }),
+  ).toBeVisible();
 
   // Move T1 right (swaps with T2), save, and the layout survives a reload.
   await page.getByRole("button", { name: /^Table T1,/ }).click();
@@ -42,8 +46,12 @@ test("owner sets up the floor: section, bulk tables, layout, edit", async ({ pag
   // The bar (not just the button, which turns into "Saving…") goes once the save lands.
   await expect(page.getByText(/not saved yet/)).toBeHidden({ timeout: 15_000 });
   await page.reload();
-  await expect(page.getByRole("button", { name: /^Table T1, 4 seats, row 1 column 2$/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /^Table T2, 4 seats, row 1 column 1$/ })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /^Table T1, 4 seats, row 1 column 2$/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /^Table T2, 4 seats, row 1 column 1$/ }),
+  ).toBeVisible();
 
   // Edit T2: 6 seats.
   await page.getByRole("button", { name: /^Table T2,/ }).click();
@@ -53,4 +61,28 @@ test("owner sets up the floor: section, bulk tables, layout, edit", async ({ pag
   await edit.getByRole("button", { name: "Save Changes" }).click();
   await expect(edit).toBeHidden({ timeout: 15_000 });
   await expect(page.getByRole("button", { name: /^Table T2, 6 seats,/ })).toBeVisible();
+
+  // Print all QR cards: a real PDF download.
+  await page.getByRole("button", { name: "Print QR Codes" }).click();
+  const print = page.getByRole("dialog", { name: "Print QR Codes" });
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    print.getByRole("link", { name: /All Tables \(6\)/ }).click(),
+  ]);
+  expect(download.suggestedFilename()).toBe("table-qr-codes.pdf");
+  expect((await readFile(await download.path())).subarray(0, 5).toString()).toBe("%PDF-");
+  await page.keyboard.press("Escape");
+
+  // New QR code for T2: the shown guest link changes.
+  await page.getByRole("button", { name: /^Table T2,/ }).click();
+  await page.getByRole("button", { name: "Edit" }).click();
+  const t2 = page.getByRole("dialog", { name: "Table T2" });
+  const link = t2.getByTestId("qr-link");
+  const before = await link.textContent();
+  await t2.getByRole("button", { name: "Get New QR Code" }).click();
+  await t2.getByRole("button", { name: "Change QR Code" }).click();
+  await expect(t2.getByText("New code ready — print the card again.")).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(link).not.toHaveText(before ?? "");
 });

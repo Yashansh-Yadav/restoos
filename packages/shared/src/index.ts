@@ -2,6 +2,7 @@
 // (Node-only helpers live under @restoos/shared/env/node.)
 export * from "./api";
 export * from "./audit";
+export * from "./brand";
 export * from "./entitlements";
 export * from "./enums";
 export * from "./events";

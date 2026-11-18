@@ -17,5 +17,7 @@ export const AUDIT_ACTIONS = [
   "device.unpaired",
   // Settings
   "outlet.settingsChanged",
+  // Floor (M3-T2): old printed QR card stops working
+  "table.rotateQr",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

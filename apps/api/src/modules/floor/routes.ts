@@ -15,6 +15,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { ModuleDeps } from "../../module-deps";
 import { tenantOf } from "../../plugins/tenant";
+import { buildQrCardsPdf } from "./qr-cards";
 import * as floor from "./service";
 
 // /api/owner/floor — sections and tables of the selected outlet (M3-T1). Permission floor.edit.
@@ -182,5 +183,47 @@ export const floorRoutes =
         await floor.deleteTable(deps(request), request.params.id);
         return reply.code(204).send(null);
       },
+    );
+
+    // QR codes (M3-T2): printable A4 cards, and a fresh code for one table.
+    app.get(
+      "/owner/floor/qr-cards.pdf",
+      {
+        preHandler,
+        schema: {
+          tags,
+          summary: "A4 PDF of table QR cards (all, one section, or one table)",
+          querystring: z.object({
+            outletId: z.string().optional(),
+            sectionId: z.string().min(1).optional(),
+            tableId: z.string().min(1).optional(),
+          }),
+        },
+      },
+      async (request, reply) => {
+        const { sectionId, tableId } = request.query;
+        const { outletName, cards } = await floor.qrCardsFor(deps(request), { sectionId, tableId });
+        const pdf = await buildQrCardsPdf({ outletName, appUrl: m.appUrl, cards });
+        const name =
+          cards.length === 1 ? `table-${cards[0]?.label ?? ""}-qr.pdf` : "table-qr-codes.pdf";
+        return reply
+          .header("content-type", "application/pdf")
+          .header("content-disposition", `attachment; filename="${name}"`)
+          .header("cache-control", "no-store")
+          .send(pdf);
+      },
+    );
+    app.post(
+      "/owner/floor/tables/:id/rotate-qr",
+      {
+        preHandler,
+        schema: {
+          tags,
+          summary: "New QR code for a table (the old printed card stops working)",
+          params: idParams,
+          response: { 200: floorTableSchema, ...errors },
+        },
+      },
+      (request) => floor.rotateQr(deps(request), request.params.id),
     );
   };

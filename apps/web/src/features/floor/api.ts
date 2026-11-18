@@ -55,3 +55,18 @@ export const saveLayout = (
 ) => apiFetch("/api/owner/floor/layout", none, opts(outletId, "PUT", { tables }));
 export const deleteTable = (outletId: string, tableId: string) =>
   apiFetch(`/api/owner/floor/tables/${id(tableId)}`, none, opts(outletId, "DELETE"));
+
+// QR codes (M3-T2). The PDF is a plain download link (cookies + ?outletId=, like the menu Excel).
+export const rotateQr = (outletId: string, tableId: string) =>
+  apiFetch(
+    `/api/owner/floor/tables/${id(tableId)}/rotate-qr`,
+    floorTableSchema,
+    opts(outletId, "POST"),
+  );
+export const qrCardsHref = (
+  outletId: string,
+  only: { sectionId?: string; tableId?: string } = {},
+) => {
+  const q = new URLSearchParams({ outletId, ...only });
+  return `/api/owner/floor/qr-cards.pdf?${q.toString()}`;
+};

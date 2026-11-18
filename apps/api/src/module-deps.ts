@@ -26,6 +26,8 @@ export type ModuleDeps = {
   requireFeature: ReturnType<typeof createFeatureGuard>;
   /** Set Secure on our cookies (APP_URL is https). */
   secureCookies: boolean;
+  /** Public web origin (APP_URL), e.g. for customer links printed on QR cards. */
+  appUrl: string;
   /** Uploaded files (menu photos). */
   storage: FileStorage;
   /** publishEvent() after successful writes (no-op until M4 attaches Socket.io). */
@@ -61,6 +63,7 @@ export function buildModuleDeps({
     requireOutlet,
     requireFeature: createFeatureGuard(entitlements),
     secureCookies: appUrl.startsWith("https://"),
+    appUrl: appUrl.replace(/\/+$/, ""),
     storage,
     events: events ?? createEventBus((err) => log?.("event.listener_failed", { err: String(err) })),
   };

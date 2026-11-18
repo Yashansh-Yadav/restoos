@@ -10,6 +10,7 @@ import {
   Loader2,
   Pencil,
   Plus,
+  QrCode,
   Rows3,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -19,12 +20,17 @@ import { cn } from "@/lib/utils";
 import { saveLayout } from "../api";
 import { floorError, useFloor, useRefreshFloor } from "../hooks";
 import { FloorGrid } from "./floor-grid";
-import { AddTablesSheet, SectionsSheet, TableSheet } from "./floor-sheets";
+import { AddTablesSheet, PrintSheet, SectionsSheet, TableSheet } from "./floor-sheets";
 
 // /owner/floor (M3-T1): sections as tabs; each is a grid. Drag tiles, or select one and use the
 // arrow buttons / keys; "Save Layout" stores all moves at once. English for now.
 
-type Open = { kind: "sections" } | { kind: "add" } | { kind: "table"; table: FloorTable } | null;
+type Open =
+  | { kind: "sections" }
+  | { kind: "add" }
+  | { kind: "print" }
+  | { kind: "table"; table: FloorTable }
+  | null;
 type Pos = { posX: number; posY: number; sectionId: string };
 
 export function FloorEditor({ outletId, initial }: { outletId: string; initial: Floor }) {
@@ -106,6 +112,12 @@ export function FloorEditor({ outletId, initial }: { outletId: string; initial: 
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {floor.sections.some((s) => s.tables.length > 0) ? (
+            <Button variant="secondary" size="sm" onClick={() => setOpen({ kind: "print" })}>
+              <QrCode aria-hidden="true" />
+              Print QR Codes
+            </Button>
+          ) : null}
           <Button variant="secondary" size="sm" onClick={() => setOpen({ kind: "sections" })}>
             <Rows3 aria-hidden="true" />
             Sections
@@ -270,6 +282,13 @@ export function FloorEditor({ outletId, initial }: { outletId: string; initial: 
             sections={floor.sections}
             sectionId={active?.id}
             onClose={close}
+          />
+        ) : open?.kind === "print" ? (
+          <PrintSheet
+            outletId={outletId}
+            sections={floor.sections}
+            activeSection={active}
+            selected={active?.tables.find((t) => t.id === selectedId) ?? null}
           />
         ) : open?.kind === "table" ? (
           <TableSheet
