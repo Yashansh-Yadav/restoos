@@ -31,6 +31,8 @@ import { publicRoutes } from "./modules/public/routes";
 import { staffRoutes } from "./modules/staff/routes";
 import { tableRoutes } from "./modules/tables/routes";
 import { registerAuthHandler } from "./plugins/auth";
+import type { ResolveActor } from "./plugins/tenant";
+import { attachSocketServer, type RestoServer } from "./socket/server";
 import { registerDocs } from "./plugins/docs";
 import { registerErrorHandling, type ServerErrorHook } from "./plugins/errors";
 
@@ -61,6 +63,8 @@ declare module "fastify" {
   interface FastifyInstance {
     /** publishEvent()/subscribe for this app — M4 attaches Socket.io here. */
     events: EventBus;
+    /** Socket.io server (M4-T1); absent in DB-free unit tests. */
+    io?: RestoServer;
   }
 }
 
@@ -94,6 +98,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const deps = options.deps;
   if (deps) registerAuthHandler(app, deps.auth, deps.appUrl);
 
+  let resolveActor: ResolveActor | undefined;
   // Every route lives under /api (plan §7). Add one register() per module.
   await app.register(
     async (api) => {
@@ -112,6 +117,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
           events,
           log: (event, data) => app.log.warn({ event, ...data }, event),
         });
+        resolveActor = moduleDeps.resolveActor;
         await api.register(staffRoutes(moduleDeps));
         await api.register(deviceRoutes(moduleDeps));
         await api.register(deviceAuthRoutes(moduleDeps));
@@ -145,6 +151,19 @@ export async function buildApp(options: BuildAppOptions = {}) {
     },
     { prefix: "/api" },
   );
+
+  // Real-time (M4-T1): Socket.io on the same HTTP server, path /api/socket.io.
+  if (deps && resolveActor) {
+    app.decorate(
+      "io",
+      attachSocketServer(app, {
+        prisma: deps.prisma,
+        redis: deps.redis,
+        resolveActor,
+        log: app.log,
+      }),
+    );
+  }
 
   return app;
 }

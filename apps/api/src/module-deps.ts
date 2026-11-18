@@ -8,7 +8,9 @@ import type { FileStorage } from "./lib/storage";
 import { createTenantDbFactory, type GetTenantDb } from "./lib/tenant";
 import {
   createFeatureGuard,
+  createActorResolver,
   createTenantResolver,
+  type ResolveActor,
   requireOutlet,
   requirePermission,
 } from "./plugins/tenant";
@@ -21,6 +23,8 @@ export type ModuleDeps = {
   entitlements: Entitlements;
   staffAuth: StaffAuth;
   resolveTenant: ReturnType<typeof createTenantResolver>;
+  /** The same auth rules for non-HTTP callers (the Socket.io handshake, M4-T1). */
+  resolveActor: ResolveActor;
   requirePermission: typeof requirePermission;
   requireOutlet: typeof requireOutlet;
   requireFeature: ReturnType<typeof createFeatureGuard>;
@@ -59,6 +63,7 @@ export function buildModuleDeps({
     entitlements,
     staffAuth,
     resolveTenant: createTenantResolver({ auth, prisma, staffAuth }),
+    resolveActor: createActorResolver({ auth, prisma, staffAuth }),
     requirePermission,
     requireOutlet,
     requireFeature: createFeatureGuard(entitlements),

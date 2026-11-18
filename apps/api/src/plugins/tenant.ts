@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@restoos/db";
 import type { FeatureKey, Permission } from "@restoos/shared";
 import { fromNodeHeaders } from "better-auth/node";
+import type { IncomingHttpHeaders } from "node:http";
 import type { FastifyReply, FastifyRequest, preHandlerAsyncHookHandler } from "fastify";
 import type { Auth } from "../lib/auth";
 import type { Entitlements } from "../lib/entitlements";
@@ -33,7 +34,16 @@ export function tenantOf(request: FastifyRequest): TenantContext {
   return request.tenant;
 }
 
-export function createTenantResolver({
+export type ActorResult =
+  | { ok: true; ctx: TenantContext }
+  | { ok: false; status: 401 | 403; code: string; message: string };
+
+/**
+ * Who is calling: the owner session (Better Auth cookie) or else a staff PIN session on its
+ * paired device. Shared by HTTP (resolveTenant) and the Socket.io handshake (M4-T1), so both
+ * apply the same rules. `outletId` is the owner's pick, checked against their organisation.
+ */
+export function createActorResolver({
   auth,
   prisma,
   staffAuth,
@@ -41,22 +51,30 @@ export function createTenantResolver({
   auth: Auth;
   prisma: PrismaClient;
   staffAuth: StaffAuth;
-}): preHandlerAsyncHookHandler {
-  return async function resolveTenant(request, reply) {
-    const session = await auth.api.getSession({ headers: fromNodeHeaders(request.headers) });
+}) {
+  return async function resolveActor(input: {
+    headers: IncomingHttpHeaders;
+    cookies: Record<string, string | undefined>;
+    outletId?: unknown;
+  }): Promise<ActorResult> {
+    const session = await auth.api.getSession({ headers: fromNodeHeaders(input.headers) });
     if (!session) {
       // Staff: PIN session on its paired device (M1-T6). Outlet = the employee's outlet.
       const staff = await staffAuth.resolve(
-        request.cookies[DEVICE_COOKIE],
-        request.cookies[STAFF_COOKIE],
+        input.cookies[DEVICE_COOKIE],
+        input.cookies[STAFF_COOKIE],
       );
-      if (!staff) return deny(reply, 401, "UNAUTHENTICATED", "Sign in to continue");
-      request.tenant = {
-        organizationId: staff.device.organizationId,
-        outletId: staff.device.outletId,
-        actor: { kind: "staff", employeeId: staff.employee.id, role: staff.employee.role },
+      if (!staff) {
+        return { ok: false, status: 401, code: "UNAUTHENTICATED", message: "Sign in to continue" };
+      }
+      return {
+        ok: true,
+        ctx: {
+          organizationId: staff.device.organizationId,
+          outletId: staff.device.outletId,
+          actor: { kind: "staff", employeeId: staff.employee.id, role: staff.employee.role },
+        },
       };
-      return;
     }
 
     const owner = await prisma.ownerAccount.findUnique({
@@ -64,27 +82,56 @@ export function createTenantResolver({
       select: { organizationId: true, role: true },
     });
     if (!owner) {
-      return deny(reply, 403, "ONBOARDING_REQUIRED", "Set up your restaurant first");
+      return {
+        ok: false,
+        status: 403,
+        code: "ONBOARDING_REQUIRED",
+        message: "Set up your restaurant first",
+      };
     }
 
     const ctx: TenantContext = {
       organizationId: owner.organizationId,
       actor: { kind: "owner", userId: session.user.id, role: owner.role },
     };
-    // Header for API calls; `?outletId=` for plain download links (M2-T2), which can't send
-    // headers. Either way it's checked against the owner's organisation below.
-    const fromQuery = (request.query as { outletId?: unknown } | undefined)?.outletId;
-    const outletId = request.headers[OUTLET_HEADER] ?? fromQuery;
+    const { outletId } = input;
     if (typeof outletId === "string" && outletId !== "") {
       const outlet = await prisma.outlet.count({
         where: { id: outletId, organizationId: owner.organizationId },
       });
       if (outlet === 0) {
-        return deny(reply, 403, "OUTLET_FORBIDDEN", "That outlet isn't part of your restaurant");
+        return {
+          ok: false,
+          status: 403,
+          code: "OUTLET_FORBIDDEN",
+          message: "That outlet isn't part of your restaurant",
+        };
       }
       ctx.outletId = outletId;
     }
-    request.tenant = ctx;
+    return { ok: true, ctx };
+  };
+}
+
+export type ResolveActor = ReturnType<typeof createActorResolver>;
+
+export function createTenantResolver(deps: {
+  auth: Auth;
+  prisma: PrismaClient;
+  staffAuth: StaffAuth;
+}): preHandlerAsyncHookHandler {
+  const resolveActor = createActorResolver(deps);
+  return async function resolveTenant(request, reply) {
+    // Header for API calls; `?outletId=` for plain download links (M2-T2), which can't send
+    // headers. Either way it's checked against the owner's organisation.
+    const fromQuery = (request.query as { outletId?: unknown } | undefined)?.outletId;
+    const result = await resolveActor({
+      headers: request.headers,
+      cookies: request.cookies,
+      outletId: request.headers[OUTLET_HEADER] ?? fromQuery,
+    });
+    if (!result.ok) return deny(reply, result.status, result.code, result.message);
+    request.tenant = result.ctx;
   };
 }
 
