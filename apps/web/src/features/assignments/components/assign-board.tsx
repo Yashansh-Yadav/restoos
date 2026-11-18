@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { FloorGrid } from "@/features/floor/components/floor-grid";
 import { cn } from "@/lib/utils";
+import { useOutletSocket } from "@/features/realtime/use-outlet-socket";
 import { assignSection, assignTable } from "../api";
 import { assignError, boardKey, useAssignmentBoard } from "../hooks";
 
@@ -26,6 +27,7 @@ export function AssignBoard({
   const client = useQueryClient();
   const key = boardKey(outletId);
   const { data: board } = useAssignmentBoard(initial, outletId);
+  useOutletSocket({ outletId }); // live: butlers starting shifts, other managers' changes (M4-T3)
   const onShift = board.butlers.filter((b) => b.onShift);
   const offShift = board.butlers.filter((b) => !b.onShift);
   const [butlerId, setButlerId] = useState<string | undefined>(onShift[0]?.id);

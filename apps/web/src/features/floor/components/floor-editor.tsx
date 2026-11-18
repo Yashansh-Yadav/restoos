@@ -19,6 +19,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { useOutletSocket } from "@/features/realtime/use-outlet-socket";
 import { saveLayout } from "../api";
 import { floorError, useFloor, useRefreshFloor } from "../hooks";
 import { FloorGrid } from "./floor-grid";
@@ -37,6 +38,7 @@ type Pos = { posX: number; posY: number; sectionId: string };
 
 export function FloorEditor({ outletId, initial }: { outletId: string; initial: Floor }) {
   const { data: floor } = useFloor(outletId, initial);
+  useOutletSocket({ outletId }); // live: another editor's changes (M4-T3)
   const refresh = useRefreshFloor(outletId);
   const [activeId, setActiveId] = useState<string | undefined>(floor.sections[0]?.id);
   const [draft, setDraft] = useState<Map<string, Pos>>(new Map());

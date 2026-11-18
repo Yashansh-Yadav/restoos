@@ -16,6 +16,7 @@ import { Sheet } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { useMenu, useRefreshMenu } from "../hooks";
 import { setStock } from "@/features/stock/api";
+import { useOutletSocket } from "@/features/realtime/use-outlet-socket";
 import { AddOnGroupsSheet } from "./addon-groups-sheet";
 import { CategoriesSheet } from "./categories-sheet";
 import { DietMarker } from "./diet-marker";
@@ -43,6 +44,7 @@ const itemCount = (n: number) => `${n} ${n === 1 ? "item" : "items"}`;
 
 export function MenuManager({ outletId, initial }: { outletId: string; initial: OwnerMenu }) {
   const { data: menu } = useMenu(outletId, initial);
+  useOutletSocket({ outletId }); // live: stock taps from the kitchen show up here (M4-T3)
   const refresh = useRefreshMenu(outletId);
   const [selected, setSelected] = useState<string | undefined>(menu.categories[0]?.id);
   const [open, setOpen] = useState<Open>(null);

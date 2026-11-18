@@ -2,10 +2,12 @@
 
 import type { StockList } from "@restoos/shared";
 import { Search } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { DietMarker } from "@/features/menu/components/diet-marker";
 import { cn } from "@/lib/utils";
-import { setStock } from "../api";
+import { useOutletSocket } from "@/features/realtime/use-outlet-socket";
+import { getStock, setStock } from "../api";
 
 // Item Stock (M2-T4): one tap marks a dish out of stock (or back). Optimistic — the switch flips
 // at once and rolls back with a message if the save fails. Big targets for busy kitchens.
@@ -13,9 +15,20 @@ import { setStock } from "../api";
 
 type Filter = "all" | "out";
 
+const stockKey = ["stock", "device"] as const;
+
 export function StockBoard({ initial }: { initial: StockList }) {
-  const [stock, setStockState] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(initial.categories.flatMap((c) => c.items.map((i) => [i.id, i.inStock]))),
+  const client = useQueryClient();
+  // Live (M4-T3): another device's toggle refreshes this list within a second or two.
+  useOutletSocket();
+  const { data } = useQuery({
+    queryKey: stockKey,
+    queryFn: () => getStock(),
+    initialData: initial,
+  });
+  const stock = useMemo<Record<string, boolean>>(
+    () => Object.fromEntries(data.categories.flatMap((c) => c.items.map((i) => [i.id, i.inStock]))),
+    [data],
   );
   const [failed, setFailed] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -25,7 +38,7 @@ export function StockBoard({ initial }: { initial: StockList }) {
   const q = query.trim().toLowerCase();
   const sections = useMemo(
     () =>
-      initial.categories
+      data.categories
         .map((c) => ({
           ...c,
           items: c.items.filter(
@@ -35,17 +48,29 @@ export function StockBoard({ initial }: { initial: StockList }) {
           ),
         }))
         .filter((c) => c.items.length > 0),
-    [initial, stock, filter, q],
+    [data, stock, filter, q],
   );
 
   async function toggle(id: string) {
     const next = !stock[id];
     setFailed(null);
-    setStockState((s) => ({ ...s, [id]: next }));
+    const flip = (inStock: boolean) =>
+      client.setQueryData<StockList>(stockKey, (prev) =>
+        prev
+          ? {
+              ...prev,
+              categories: prev.categories.map((c) => ({
+                ...c,
+                items: c.items.map((i) => (i.id === id ? { ...i, inStock } : i)),
+              })),
+            }
+          : prev,
+      );
+    flip(next);
     try {
       await setStock(id, next);
     } catch {
-      setStockState((s) => ({ ...s, [id]: !next }));
+      flip(!next);
       setFailed(id);
     }
   }
@@ -105,7 +130,7 @@ export function StockBoard({ initial }: { initial: StockList }) {
 
       {sections.length === 0 ? (
         <p className="rounded-md bg-muted px-4 py-6 text-center text-base text-body">
-          {initial.categories.length === 0
+          {data.categories.length === 0
             ? "No dishes on the menu yet."
             : filter === "out"
               ? "Nothing is out of stock."

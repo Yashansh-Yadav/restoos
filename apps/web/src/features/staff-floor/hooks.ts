@@ -6,13 +6,12 @@ import { getStaffFloor } from "./api";
 
 export const staffFloorKey = ["staff-floor"] as const;
 
-/** Polls every 20 s and on focus until M4's sockets push changes (decision log 2026-11-18). */
+/** Kept fresh by useOutletSocket (M4-T3) — no polling; refetches on focus as a fallback. */
 export function useStaffFloor(initialData: StaffFloor) {
   return useQuery({
     queryKey: staffFloorKey,
     queryFn: () => getStaffFloor(),
     initialData,
-    refetchInterval: 20_000,
     refetchOnWindowFocus: true,
   });
 }

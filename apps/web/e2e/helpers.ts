@@ -44,7 +44,9 @@ export async function addTables(page: Page, count: number) {
   await page.getByRole("button", { name: "Add Tables" }).first().click();
   const add = page.getByRole("dialog", { name: "Add Tables" });
   await add.getByLabel("To").fill(String(count));
-  await add.getByRole("button", { name: `Add ${count} Tables` }).click();
+  await add
+    .getByRole("button", { name: `Add ${count} ${count === 1 ? "Table" : "Tables"}` })
+    .click();
   await expect(add).toBeHidden({ timeout: 15_000 });
 }
 

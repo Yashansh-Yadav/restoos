@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { FloorGrid } from "@/features/floor/components/floor-grid";
 import { cn } from "@/lib/utils";
+import { useOutletSocket } from "@/features/realtime/use-outlet-socket";
 import { changeTableStatus } from "../api";
 import { floorActionError, staffFloorKey, useStaffFloor } from "../hooks";
 
@@ -72,6 +73,7 @@ function minutesAgo(iso: string | null): string | null {
 export function StaffFloorView({ initial }: { initial: StaffFloor }) {
   const client = useQueryClient();
   const { data: floor, isFetching, refetch } = useStaffFloor(initial);
+  const { status: live } = useOutletSocket();
   const all = floor.sections.flatMap((s) => s.tables);
   const hasMine = all.some((t) => t.mine);
   const [onlyMine, setOnlyMine] = useState(hasMine);
@@ -169,6 +171,23 @@ export function StaffFloorView({ initial }: { initial: StaffFloor }) {
               ))}
             </div>
           ) : null}
+          <span
+            role="status"
+            className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground"
+          >
+            <span
+              aria-hidden="true"
+              className={cn(
+                "size-2 rounded-full",
+                live === "live"
+                  ? "bg-success"
+                  : live === "connecting"
+                    ? "bg-warning"
+                    : "bg-muted-foreground",
+              )}
+            />
+            {live === "live" ? "Live" : live === "connecting" ? "Reconnecting…" : "Offline"}
+          </span>
           <Button
             variant="secondary"
             size="icon"
