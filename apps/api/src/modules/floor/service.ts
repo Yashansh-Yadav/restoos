@@ -322,10 +322,11 @@ export async function saveLayout(deps: FloorDeps, input: LayoutInput): Promise<v
   await changed(deps);
 }
 
-export async function deleteTable(deps: FloorDeps, id: string): Promise<void> {
+/** Deletes a never-used table; returns its QR token so live customer sockets can be cut off. */
+export async function deleteTable(deps: FloorDeps, id: string): Promise<string> {
   const { db } = deps;
-  if (!(await db.diningTable.findUnique({ where: { id }, select: { id: true } })))
-    throw notFound("Table");
+  const table = await db.diningTable.findUnique({ where: { id }, select: { qrToken: true } });
+  if (!table) throw notFound("Table");
   const [sessions, bells] = await Promise.all([
     db.tableSession.count({ where: { tableId: id } }),
     db.bellEvent.count({ where: { tableId: id } }),
@@ -338,15 +339,19 @@ export async function deleteTable(deps: FloorDeps, id: string): Promise<void> {
     await tx.diningTable.delete({ where: { id } });
   });
   await changed(deps);
+  return table.qrToken;
 }
 
 // ── QR codes (M3-T2) ────────────────────────────────────────────────────────
 
 /** New QR token for one table: the old printed card stops working at once (lookup is uncached). */
-export async function rotateQr(deps: FloorDeps, id: string): Promise<FloorTable> {
+export async function rotateQr(
+  deps: FloorDeps,
+  id: string,
+): Promise<{ table: FloorTable; previousQrToken: string }> {
   const { db, ctx } = deps;
-  if (!(await db.diningTable.findUnique({ where: { id }, select: { id: true } })))
-    throw notFound("Table");
+  const before = await db.diningTable.findUnique({ where: { id }, select: { qrToken: true } });
+  if (!before) throw notFound("Table");
   const table = await db.$transaction(async (tx) => {
     const row = await tx.diningTable.update({
       where: { id },
@@ -357,7 +362,7 @@ export async function rotateQr(deps: FloorDeps, id: string): Promise<FloorTable>
     return row;
   });
   await changed(deps);
-  return table;
+  return { table, previousQrToken: before.qrToken };
 }
 
 export type QrCard = { label: string; section: string; qrToken: string };

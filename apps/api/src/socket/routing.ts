@@ -1,0 +1,29 @@
+import type { OutletEventName } from "@restoos/shared";
+import { rooms } from "./rooms";
+
+// Which rooms each published event reaches (plan §8, M4-T2). Typed over the shared event map:
+// a new event without a routing entry is a compile error, so nothing is silently dropped or
+// accidentally broadcast. Customers get outlet-wide events through `outlet:{o}:public` (one emit,
+// no lookup of every table token); table-specific events (bill, bell) will use `table:{token}`.
+
+export type Audience = "staff" | "owner" | "customers" | "kitchen";
+
+export const EVENT_ROUTES: { readonly [K in OutletEventName]: readonly Audience[] } = {
+  "menu.changed": ["staff", "owner", "customers"],
+  "menu.stockChanged": ["staff", "owner", "customers"],
+  "outlet.settingsChanged": ["staff", "owner", "customers"],
+  "floor.changed": ["staff", "owner"],
+  "assignment.changed": ["staff", "owner"],
+  "table.statusChanged": ["staff", "owner"],
+};
+
+const roomOf: Record<Audience, (outletId: string) => string> = {
+  staff: rooms.staff,
+  owner: rooms.owner,
+  customers: rooms.public,
+  kitchen: rooms.kitchen,
+};
+
+export function roomsFor(outletId: string, name: OutletEventName): string[] {
+  return EVENT_ROUTES[name].map((a) => roomOf[a](outletId));
+}

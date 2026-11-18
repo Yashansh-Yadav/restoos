@@ -19,6 +19,7 @@ import {
   type AuthedDevice,
 } from "../../lib/staff-auth";
 import type { ModuleDeps } from "../../module-deps";
+import { rooms } from "../../socket/rooms";
 
 // Device pairing + staff PIN sign-in (M1-T6, plan §6.3).
 //   POST /api/device/pair     public: one-time code → device cookie
@@ -186,8 +187,11 @@ export const deviceAuthRoutes =
         },
       },
       async (request, reply) => {
-        await staffAuth.endShift(await signedInStaff(request), request.cookies[STAFF_COOKIE]);
+        const me = await signedInStaff(request);
+        await staffAuth.endShift(me, request.cookies[STAFF_COOKIE]);
         clearStaff(reply);
+        // Their live connection goes too (M4-T2): the next person signs in fresh.
+        m.realtime.disconnect([rooms.employee(me.device.outletId, me.employee.id)]);
         return reply.code(204).send(null);
       },
     );
@@ -202,8 +206,13 @@ export const deviceAuthRoutes =
         },
       },
       async (request, reply) => {
+        const me = await staffAuth.resolve(
+          request.cookies[DEVICE_COOKIE],
+          request.cookies[STAFF_COOKIE],
+        );
         await staffAuth.logout(request.cookies[STAFF_COOKIE]);
         clearStaff(reply);
+        if (me) m.realtime.disconnect([rooms.employee(me.device.outletId, me.employee.id)]);
         return reply.code(204).send(null);
       },
     );

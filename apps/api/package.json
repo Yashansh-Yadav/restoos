@@ -25,6 +25,7 @@
     "@restoos/shared": "workspace:*",
     "@sentry/node": "11.12.0",
     "@socket.io/redis-adapter": "8.3.0",
+    "@socket.io/redis-emitter": "5.1.0",
     "better-auth": "1.7.25",
     "exceljs": "4.4.0",
     "fastify": "5.12.8",

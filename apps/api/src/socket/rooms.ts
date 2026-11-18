@@ -8,5 +8,7 @@ export const rooms = {
   employee: (outletId: string, employeeId: string) => `outlet:${outletId}:employee:${employeeId}`,
   kitchen: (outletId: string) => `outlet:${outletId}:kitchen`,
   owner: (outletId: string) => `outlet:${outletId}:owner`,
+  /** Customer phones of the outlet: outlet-wide public events (stock, menu, ordering mode). */
+  public: (outletId: string) => `outlet:${outletId}:public`,
   table: (qrToken: string) => `table:${qrToken}`,
 };

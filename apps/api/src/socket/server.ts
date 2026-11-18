@@ -1,6 +1,6 @@
 import fastifyCookie from "@fastify/cookie";
 import type { PrismaClient } from "@restoos/db";
-import { QR_TOKEN_FORMAT } from "@restoos/shared";
+import { QR_TOKEN_FORMAT, type ServerToClientEvents } from "@restoos/shared";
 import { createAdapter } from "@socket.io/redis-adapter";
 import type { FastifyBaseLogger, FastifyInstance } from "fastify";
 import { Server, type Socket } from "socket.io";
@@ -13,7 +13,7 @@ import { rooms } from "./rooms";
 // The handshake reuses the HTTP auth rules (resolveActor) and puts each connection in its rooms:
 //   staff device + PIN cookies → outlet staff, role, employee (+ kitchen) rooms
 //   owner session + auth.outletId → outlet owner room
-//   customer auth.qrToken → table room only
+//   customer auth.qrToken → its table room + the outlet public room (outlet-wide menu/stock)
 // Server → client only for now: nothing listens to client-emitted events.
 // The Redis adapter fans emits out across API instances (and, later, workers).
 
@@ -25,9 +25,7 @@ export type SocketIdentity =
   | { kind: "customer"; outletId: string; tableId: string };
 
 type SocketData = { identity: SocketIdentity };
-/** Server → client events; typed per event in M4-T2 (packages/shared/src/events.ts). */
-type ServerEvents = Record<string, (payload: unknown) => void>;
-export type RestoServer = Server<Record<string, never>, ServerEvents, object, SocketData>;
+export type RestoServer = Server<Record<string, never>, ServerToClientEvents, object, SocketData>;
 
 class HandshakeError extends Error {
   readonly data: { code: string };
@@ -132,7 +130,7 @@ async function identify(
     if (!table) throw new HandshakeError("TABLE_NOT_FOUND", "This table's QR code isn't valid.");
     return {
       identity: { kind: "customer", outletId: table.outletId, tableId: table.id },
-      join: [rooms.table(qrToken)],
+      join: [rooms.table(qrToken), rooms.public(table.outletId)],
     };
   }
 

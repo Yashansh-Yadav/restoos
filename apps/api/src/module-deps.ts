@@ -5,6 +5,7 @@ import { createEventBus, type EventBus } from "./lib/events";
 import type { Redis } from "./lib/redis";
 import { createStaffAuth, type StaffAuth } from "./lib/staff-auth";
 import type { FileStorage } from "./lib/storage";
+import type { Realtime } from "./socket/realtime";
 import { createTenantDbFactory, type GetTenantDb } from "./lib/tenant";
 import {
   createFeatureGuard,
@@ -34,8 +35,10 @@ export type ModuleDeps = {
   appUrl: string;
   /** Uploaded files (menu photos). */
   storage: FileStorage;
-  /** publishEvent() after successful writes (no-op until M4 attaches Socket.io). */
+  /** publishEvent() after successful writes; routed to Socket.io rooms (M4-T2). */
   events: EventBus;
+  /** Cut off live sockets (sign-out, QR rotation…); a no-op without Socket.io. */
+  realtime: Realtime;
 };
 
 export function buildModuleDeps({
@@ -45,6 +48,7 @@ export function buildModuleDeps({
   storage,
   events,
   appUrl = "http://localhost:3000",
+  realtime = { disconnect: () => undefined },
   log,
 }: {
   auth: Auth;
@@ -54,6 +58,7 @@ export function buildModuleDeps({
   /** The app's bus (buildApp); tests may omit it to get a private one. */
   events?: EventBus;
   appUrl?: string;
+  realtime?: Realtime;
   log?: (event: string, data: Record<string, unknown>) => void;
 }): ModuleDeps {
   const entitlements = createEntitlements(prisma);
@@ -70,6 +75,7 @@ export function buildModuleDeps({
     secureCookies: appUrl.startsWith("https://"),
     appUrl: appUrl.replace(/\/+$/, ""),
     storage,
+    realtime,
     events: events ?? createEventBus((err) => log?.("event.listener_failed", { err: String(err) })),
   };
 }

@@ -15,6 +15,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { ModuleDeps } from "../../module-deps";
 import { tenantOf } from "../../plugins/tenant";
+import { rooms } from "../../socket/rooms";
 import { buildQrCardsPdf } from "./qr-cards";
 import * as floor from "./service";
 
@@ -180,7 +181,8 @@ export const floorRoutes =
         },
       },
       async (request, reply) => {
-        await floor.deleteTable(deps(request), request.params.id);
+        const qrToken = await floor.deleteTable(deps(request), request.params.id);
+        m.realtime.disconnect([rooms.table(qrToken)]);
         return reply.code(204).send(null);
       },
     );
@@ -224,6 +226,11 @@ export const floorRoutes =
           response: { 200: floorTableSchema, ...errors },
         },
       },
-      (request) => floor.rotateQr(deps(request), request.params.id),
+      async (request) => {
+        const { table, previousQrToken } = await floor.rotateQr(deps(request), request.params.id);
+        // Phones still on the old code lose their live connection (M4-T2); they can't rejoin.
+        m.realtime.disconnect([rooms.table(previousQrToken)]);
+        return table;
+      },
     );
   };

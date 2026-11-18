@@ -10,7 +10,8 @@ import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { ModuleDeps } from "../../module-deps";
-import { tenantOf } from "../../plugins/tenant";
+import { outletOf, tenantOf } from "../../plugins/tenant";
+import { rooms } from "../../socket/rooms";
 import { createEmployee, listStaff, setPin, updateEmployee, type StaffDeps } from "./service";
 
 // /api/owner/staff — owners and managers manage the selected outlet's staff (M1-T5).
@@ -72,7 +73,14 @@ export const staffRoutes =
           response: { 200: employeeSchema, ...errors },
         },
       },
-      (request) => updateEmployee(deps(request), request.params.id, request.body),
+      async (request) => {
+        const employee = await updateEmployee(deps(request), request.params.id, request.body);
+        // Deactivated: their sessions are revoked; cut their live connection too (M4-T2).
+        if (request.body.isActive === false) {
+          m.realtime.disconnect([rooms.employee(outletOf(request), employee.id)]);
+        }
+        return employee;
+      },
     );
 
     app.put(
@@ -89,6 +97,7 @@ export const staffRoutes =
       },
       async (request, reply) => {
         await setPin(deps(request), request.params.id, request.body.pin);
+        m.realtime.disconnect([rooms.employee(outletOf(request), request.params.id)]);
         return reply.code(204).send(null);
       },
     );

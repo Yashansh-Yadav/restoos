@@ -22,3 +22,21 @@ export type OutletEventName = keyof OutletEvents;
 export type OutletEvent = {
   [K in OutletEventName]: { name: K; payload: OutletEvents[K] };
 }[OutletEventName];
+
+/** Socket.io server → client contract (M4-T2): each event arrives with its typed payload. */
+export type ServerToClientEvents = {
+  [K in OutletEventName]: (payload: OutletEvents[K]) => void;
+};
+
+/** Every event name, for exhaustive routing tables and client subscriptions. */
+export const OUTLET_EVENT_NAMES = [
+  "menu.changed",
+  "menu.stockChanged",
+  "outlet.settingsChanged",
+  "floor.changed",
+  "assignment.changed",
+  "table.statusChanged",
+] as const satisfies readonly OutletEventName[];
+type MissingEventName = Exclude<OutletEventName, (typeof OUTLET_EVENT_NAMES)[number]>;
+// Compile-time check: adding an event to OutletEvents without listing it here fails the build.
+export const ALL_EVENTS_LISTED: MissingEventName extends never ? true : never = true;

@@ -125,7 +125,9 @@ describe("Socket.io (M4-T1)", () => {
   it("lets a customer into their table room by QR token; rotated tokens are refused", async () => {
     const { r, t1 } = await setup();
     const guest = await connect(h.app, { auth: { qrToken: t1.qrToken } });
-    expect(roomsOf(h.app, guest)).toEqual([rooms.table(t1.qrToken)]);
+    expect(roomsOf(h.app, guest)).toEqual(
+      [rooms.table(t1.qrToken), rooms.public(r.outletId)].sort(),
+    );
     await expect(connect(h.app, { auth: { qrToken: "../../etc" } })).rejects.toThrow(
       "TABLE_NOT_FOUND",
     );
@@ -176,13 +178,15 @@ describe("Socket.io (M4-T1)", () => {
     // The second instance's Redis subscription is set up asynchronously: wait until a warm-up
     // emit gets through before measuring.
     let warm = false;
-    ownerOnApp2.on("warmup", () => {
+    ownerOnApp2.on("assignment.changed", () => {
       warm = true;
     });
     await expect
       .poll(
         () => {
-          h.app.io?.to(rooms.owner(other.outletId)).emit("warmup", {});
+          h.app.io
+            ?.to(rooms.owner(other.outletId))
+            .emit("assignment.changed", { outletId: "warm" });
           return warm;
         },
         { timeout: 15_000, interval: 200 },
@@ -190,16 +194,16 @@ describe("Socket.io (M4-T1)", () => {
       .toBe(true);
 
     const got = { ours: [] as unknown[], theirs: [] as unknown[], app2: [] as unknown[] };
-    ours.on("ping.test", (p: unknown) => got.ours.push(p));
-    theirOwner.on("ping.test", (p: unknown) => got.theirs.push(p));
-    ownerOnApp2.on("ping.test", (p: unknown) => got.app2.push(p));
+    ours.on("floor.changed", (p: unknown) => got.ours.push(p));
+    theirOwner.on("floor.changed", (p: unknown) => got.theirs.push(p));
+    ownerOnApp2.on("floor.changed", (p: unknown) => got.app2.push(p));
 
-    h.app.io?.to(rooms.staff(r.outletId)).emit("ping.test", { to: "A staff" });
-    h.app.io?.to(rooms.owner(other.outletId)).emit("ping.test", { to: "B owner" });
+    h.app.io?.to(rooms.staff(r.outletId)).emit("floor.changed", { outletId: "A staff" });
+    h.app.io?.to(rooms.owner(other.outletId)).emit("floor.changed", { outletId: "B owner" });
 
     await expect.poll(() => got.app2.length, { timeout: 5_000 }).toBe(1);
-    expect(got.ours).toEqual([{ to: "A staff" }]);
-    expect(got.theirs).toEqual([{ to: "B owner" }]);
-    expect(got.app2).toEqual([{ to: "B owner" }]);
+    expect(got.ours).toEqual([{ outletId: "A staff" }]);
+    expect(got.theirs).toEqual([{ outletId: "B owner" }]);
+    expect(got.app2).toEqual([{ outletId: "B owner" }]);
   });
 });

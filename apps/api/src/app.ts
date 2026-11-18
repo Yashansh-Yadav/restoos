@@ -32,6 +32,8 @@ import { staffRoutes } from "./modules/staff/routes";
 import { tableRoutes } from "./modules/tables/routes";
 import { registerAuthHandler } from "./plugins/auth";
 import type { ResolveActor } from "./plugins/tenant";
+import { createRealtime } from "./socket/realtime";
+import { roomsFor } from "./socket/routing";
 import { attachSocketServer, type RestoServer } from "./socket/server";
 import { registerDocs } from "./plugins/docs";
 import { registerErrorHandling, type ServerErrorHook } from "./plugins/errors";
@@ -99,6 +101,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   if (deps) registerAuthHandler(app, deps.auth, deps.appUrl);
 
   let resolveActor: ResolveActor | undefined;
+  const realtime = createRealtime();
   // Every route lives under /api (plan §7). Add one register() per module.
   await app.register(
     async (api) => {
@@ -115,6 +118,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
         const moduleDeps = buildModuleDeps({
           ...deps,
           events,
+          realtime,
           log: (event, data) => app.log.warn({ event, ...data }, event),
         });
         resolveActor = moduleDeps.resolveActor;
@@ -152,17 +156,24 @@ export async function buildApp(options: BuildAppOptions = {}) {
     { prefix: "/api" },
   );
 
-  // Real-time (M4-T1): Socket.io on the same HTTP server, path /api/socket.io.
+  // Real-time (M4-T1/T2): Socket.io on the same HTTP server, path /api/socket.io. Every
+  // published event goes to its rooms (socket/routing.ts); emitting never fails the write.
   if (deps && resolveActor) {
-    app.decorate(
-      "io",
-      attachSocketServer(app, {
-        prisma: deps.prisma,
-        redis: deps.redis,
-        resolveActor,
-        log: app.log,
-      }),
-    );
+    const io = attachSocketServer(app, {
+      prisma: deps.prisma,
+      redis: deps.redis,
+      resolveActor,
+      log: app.log,
+    });
+    app.decorate("io", io);
+    realtime.attach(io);
+    events.subscribe((_ctx, e) => {
+      try {
+        io.to(roomsFor(e.payload.outletId, e.name)).emit(e.name, e.payload);
+      } catch (err) {
+        app.log.warn({ err, event: e.name }, "socket emit failed");
+      }
+    });
   }
 
   return app;
