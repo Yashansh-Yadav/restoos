@@ -17,6 +17,7 @@ import type { Redis } from "./lib/redis";
 import type { FileStorage } from "./lib/storage";
 import { devRoutes } from "./modules/dev/routes";
 import { fileRoutes } from "./modules/files/routes";
+import { floorRoutes } from "./modules/floor/routes";
 import { healthRoutes } from "./modules/health/routes";
 import { deviceAuthRoutes } from "./modules/device-auth/routes";
 import { deviceRoutes } from "./modules/devices/routes";
@@ -114,6 +115,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
         await api.register(deviceAuthRoutes(moduleDeps));
         await api.register(outletSettingsRoutes(moduleDeps));
         await api.register(menuRoutes(moduleDeps));
+        await api.register(floorRoutes(moduleDeps));
 
         // Customer menu (M2-T5): cached per outlet, busted by any menu/stock/settings change.
         const publicMenu = createPublicMenu({

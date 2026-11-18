@@ -8,6 +8,8 @@ export type OutletEvents = {
   "menu.stockChanged": { outletId: string; itemId: string; inStock: boolean };
   /** Outlet settings changed (ordering mode, shift auto-start…) — busts the customer menu. */
   "outlet.settingsChanged": { outletId: string };
+  /** Sections or tables were added, edited, moved or removed (M3-T1). */
+  "floor.changed": { outletId: string };
 };
 
 export type OutletEventName = keyof OutletEvents;

@@ -14,6 +14,7 @@ export * from "./permissions";
 export * from "./schemas/auth";
 export * from "./schemas/billing";
 export * from "./schemas/device";
+export * from "./schemas/floor";
 export * from "./schemas/menu";
 export * from "./schemas/onboarding";
 export * from "./schemas/staff";
