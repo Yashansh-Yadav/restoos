@@ -10,6 +10,7 @@ import {
 } from "@restoos/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { Bell, Brush, ClipboardCheck, Loader2, ReceiptText, RefreshCw } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -48,6 +49,9 @@ export const STATUS: Record<TableStatus, { word: string; tile: string; pill: str
   },
 };
 
+/** Tables a butler can take an order for (plan §5.6: order is allowed from these). */
+const ORDERABLE = new Set<TableStatus>(["FREE", "OCCUPIED", "ORDERED", "BILL_REQUESTED"]);
+
 const ACTION: Record<ManualTableEvent, { label: string; primary: boolean }> = {
   seat: { label: "Seat Guests", primary: true },
   unseat: { label: "Guests Left", primary: false },
@@ -72,6 +76,7 @@ function minutesAgo(iso: string | null): string | null {
 
 export function StaffFloorView({ initial }: { initial: StaffFloor }) {
   const client = useQueryClient();
+  const router = useRouter();
   const { data: floor, isFetching, refetch } = useStaffFloor(initial);
   const { status: live } = useOutletSocket();
   const all = floor.sections.flatMap((s) => s.tables);
@@ -242,7 +247,11 @@ export function StaffFloorView({ initial }: { initial: StaffFloor }) {
           tables={section.tables}
           onSelect={(id) => {
             setError(null);
-            setOpenId(id);
+            const t = section.tables.find((x) => x.id === id);
+            // M5-T1: orderable tables go straight to the order screen (tap table → items → Send);
+            // paid / cleaning tables keep the sheet (Clear Table, Mark Cleaned).
+            if (t && ORDERABLE.has(t.status)) router.push(`/staff/tables/${id}`);
+            else setOpenId(id);
           }}
           tileLabel={(g) => {
             const t = section.tables.find((x) => x.id === g.id);

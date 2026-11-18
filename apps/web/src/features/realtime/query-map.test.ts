@@ -17,13 +17,17 @@ describe("live event → query map (M4-T3)", () => {
   it("invalidates exactly the event's prefixes", () => {
     const client = { invalidateQueries: vi.fn() };
     invalidateFor(client, "table.statusChanged");
-    expect(client.invalidateQueries.mock.calls).toEqual([[{ queryKey: ["staff-floor"] }]]);
+    expect(client.invalidateQueries.mock.calls).toEqual([
+      [{ queryKey: ["staff-floor"] }],
+      [{ queryKey: ["order-pad"] }],
+    ]);
 
     client.invalidateQueries.mockClear();
     invalidateFor(client, "menu.stockChanged");
     expect(client.invalidateQueries.mock.calls).toEqual([
       [{ queryKey: ["menu"] }],
       [{ queryKey: ["stock"] }],
+      [{ queryKey: ["order-pad"] }],
     ]);
   });
 

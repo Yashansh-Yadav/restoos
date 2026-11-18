@@ -16,6 +16,8 @@ export type OutletEvents = {
   "assignment.changed": { outletId: string };
   /** A table moved through the state machine (M3-T4: seat, guests left, cleaning…). */
   "table.statusChanged": { outletId: string; tableId: string; status: TableStatus };
+  /** Staff sent items to the kitchen for a table (M5-T1). */
+  "order.created": { outletId: string; orderId: string; tableId: string };
 };
 
 export type OutletEventName = keyof OutletEvents;
@@ -36,6 +38,7 @@ export const OUTLET_EVENT_NAMES = [
   "floor.changed",
   "assignment.changed",
   "table.statusChanged",
+  "order.created",
 ] as const satisfies readonly OutletEventName[];
 type MissingEventName = Exclude<OutletEventName, (typeof OUTLET_EVENT_NAMES)[number]>;
 // Compile-time check: adding an event to OutletEvents without listing it here fails the build.

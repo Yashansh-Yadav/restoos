@@ -9,7 +9,8 @@ import {
   tableTile,
 } from "./helpers";
 
-// M3-T4 acceptance: a butler sees their tables on the floor and moves one through seat → free.
+// M3-T4 acceptance: a butler sees their tables on the floor and moves one through seat → free
+// (since M5-T1 via the table's order screen).
 
 test("butler seats guests at their table from the floor view", async ({
   page,
@@ -40,24 +41,22 @@ test("butler seats guests at their table from the floor view", async ({
   const t1 = tableTile(tablet, "T1");
   await expect(t1).toHaveAccessibleName(/Free, with Rahul$/);
 
-  // Tap T1 → Seat Guests (2 taps).
-  const sheet = tablet.getByRole("dialog", { name: "Table T1" });
+  // Tap T1 → its order screen (M5-T1); "Seat Only" seats guests without ordering yet.
   await expect(async () => {
     await t1.click({ timeout: 2_000 });
-    await expect(sheet).toBeVisible({ timeout: 2_000 });
+    await expect(tablet).toHaveURL(/\/staff\/tables\//, { timeout: 2_000 });
   }).toPass({ timeout: 20_000 });
-  await sheet.getByRole("button", { name: "Seat Guests" }).click();
-  await expect(t1).toHaveAccessibleName(/Seated, with Rahul$/, { timeout: 15_000 });
+  const header = tablet.getByRole("banner");
+  await expect(async () => {
+    await header.getByRole("button", { name: "Seat Only" }).click({ timeout: 2_000 });
+    await expect(header.getByText("Seated", { exact: true })).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 20_000 });
 
-  // Guests left before ordering → free again; cleaning isn't offered for a free table.
-  await t1.click();
-  await expect(sheet.getByText("just now")).toBeVisible();
-  await sheet.getByRole("button", { name: "Guests Left" }).click();
+  // Guests left before ordering → free again.
+  await header.getByRole("button", { name: "Guests Left" }).click();
+  await expect(header.getByText("Free", { exact: true })).toBeVisible({ timeout: 15_000 });
+  await header.getByRole("link", { name: "Floor" }).click();
   await expect(t1).toHaveAccessibleName(/Free, with Rahul$/, { timeout: 15_000 });
-  await t1.click();
-  await expect(sheet.getByRole("button", { name: "Seat Guests" })).toBeVisible();
-  await expect(sheet.getByRole("button", { name: "Mark Cleaned" })).toHaveCount(0);
-  await tablet.keyboard.press("Escape");
 
   // "All" shows everyone's tables.
   await tablet.getByRole("button", { name: "All" }).click();

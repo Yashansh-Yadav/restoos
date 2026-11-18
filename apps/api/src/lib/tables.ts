@@ -39,72 +39,90 @@ export type TransitionResult = {
   sessionId: string | null;
 };
 
+/** The parts of a (tenant) transaction client a transition needs. */
+export type TableTx = Pick<TenantDb, "diningTable" | "tableSession">;
+
+/**
+ * The transition itself, inside the caller's transaction (no event yet). Used by
+ * transitionTable() and by writes that must change the table atomically with their own rows —
+ * e.g. sending an order (M5-T1): never an "ordered" table without the order.
+ */
+export async function applyTableTransition(
+  tx: TableTx,
+  ctx: TenantContext,
+  tableId: string,
+  event: TableEvent,
+): Promise<TransitionResult> {
+  const outletId = ctx.outletId;
+  if (!outletId) throw new AppError(400, "OUTLET_REQUIRED", "Choose an outlet first");
+  const table = await tx.diningTable.findUnique({
+    where: { id: tableId },
+    select: { id: true, label: true, status: true },
+  });
+  if (!table) throw notFound("Table");
+  if (!canTransition(table.status, event)) {
+    const reason = `${table.label} is ${STATUS_WORDS[table.status]} — it can't ${EVENT_WORDS[event]}.`;
+    throw new AppError(409, "INVALID_TABLE_TRANSITION", reason, {
+      status: table.status,
+      event,
+    });
+  }
+  const to = nextTableStatus(table.status, event);
+
+  // Guard against two taps at once: only move from the status we read.
+  const moved = await tx.diningTable.updateMany({
+    where: { id: tableId, status: table.status },
+    data: { status: to },
+  });
+  if (moved.count === 0) {
+    throw new AppError(409, "TABLE_CHANGED", `${table.label} just changed. Check it again.`);
+  }
+
+  let sessionId: string | null = null;
+  const effect = sessionEffect(table.status, event);
+  if (effect === "open") {
+    // Close anything left open by mistake before starting the new guests' session.
+    await tx.tableSession.updateMany({
+      where: { tableId, closedAt: null },
+      data: { closedAt: new Date() },
+    });
+    const session = await tx.tableSession.create({
+      data: { organizationId: ctx.organizationId, outletId, tableId },
+      select: { id: true },
+    });
+    sessionId = session.id;
+  } else if (effect === "close") {
+    await tx.tableSession.updateMany({
+      where: { tableId, closedAt: null },
+      data: { closedAt: new Date() },
+    });
+  } else {
+    const open = await tx.tableSession.findFirst({
+      where: { tableId, closedAt: null },
+      select: { id: true },
+      orderBy: { openedAt: "desc" },
+    });
+    sessionId = open?.id ?? null;
+  }
+  return { id: table.id, label: table.label, status: to, sessionId };
+}
+
+/** Publishes the change after the transaction committed. */
+export function publishTableStatus(events: EventBus, ctx: TenantContext, t: TransitionResult) {
+  return events.publishEvent(ctx, "table.statusChanged", {
+    outletId: ctx.outletId ?? "",
+    tableId: t.id,
+    status: t.status,
+  });
+}
+
 export async function transitionTable(
   deps: { db: TenantDb; ctx: TenantContext; events: EventBus },
   tableId: string,
   event: TableEvent,
 ): Promise<TransitionResult> {
   const { db, ctx, events } = deps;
-  const outletId = ctx.outletId;
-  if (!outletId) throw new AppError(400, "OUTLET_REQUIRED", "Choose an outlet first");
-
-  const result = await db.$transaction(async (tx) => {
-    const table = await tx.diningTable.findUnique({
-      where: { id: tableId },
-      select: { id: true, label: true, status: true },
-    });
-    if (!table) throw notFound("Table");
-    if (!canTransition(table.status, event)) {
-      const reason = `${table.label} is ${STATUS_WORDS[table.status]} — it can't ${EVENT_WORDS[event]}.`;
-      throw new AppError(409, "INVALID_TABLE_TRANSITION", reason, {
-        status: table.status,
-        event,
-      });
-    }
-    const to = nextTableStatus(table.status, event);
-
-    // Guard against two taps at once: only move from the status we read.
-    const moved = await tx.diningTable.updateMany({
-      where: { id: tableId, status: table.status },
-      data: { status: to },
-    });
-    if (moved.count === 0) {
-      throw new AppError(409, "TABLE_CHANGED", `${table.label} just changed. Check it again.`);
-    }
-
-    let sessionId: string | null = null;
-    const effect = sessionEffect(table.status, event);
-    if (effect === "open") {
-      // Close anything left open by mistake before starting the new guests' session.
-      await tx.tableSession.updateMany({
-        where: { tableId, closedAt: null },
-        data: { closedAt: new Date() },
-      });
-      const session = await tx.tableSession.create({
-        data: { organizationId: ctx.organizationId, outletId, tableId },
-        select: { id: true },
-      });
-      sessionId = session.id;
-    } else if (effect === "close") {
-      await tx.tableSession.updateMany({
-        where: { tableId, closedAt: null },
-        data: { closedAt: new Date() },
-      });
-    } else {
-      const open = await tx.tableSession.findFirst({
-        where: { tableId, closedAt: null },
-        select: { id: true },
-        orderBy: { openedAt: "desc" },
-      });
-      sessionId = open?.id ?? null;
-    }
-    return { id: table.id, label: table.label, status: to, sessionId };
-  });
-
-  await events.publishEvent(ctx, "table.statusChanged", {
-    outletId,
-    tableId,
-    status: result.status,
-  });
+  const result = await db.$transaction((tx) => applyTableTransition(tx, ctx, tableId, event));
+  await publishTableStatus(events, ctx, result);
   return result;
 }
