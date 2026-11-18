@@ -29,6 +29,7 @@ import { onboardingRoutes } from "./modules/onboarding/routes";
 import { outletSettingsRoutes } from "./modules/outlet-settings/routes";
 import { publicRoutes } from "./modules/public/routes";
 import { staffRoutes } from "./modules/staff/routes";
+import { tableRoutes } from "./modules/tables/routes";
 import { registerAuthHandler } from "./plugins/auth";
 import { registerDocs } from "./plugins/docs";
 import { registerErrorHandling, type ServerErrorHook } from "./plugins/errors";
@@ -118,6 +119,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
         await api.register(menuRoutes(moduleDeps));
         await api.register(floorRoutes(moduleDeps));
         await api.register(assignmentRoutes(moduleDeps));
+        await api.register(tableRoutes(moduleDeps));
 
         // Customer menu (M2-T5): cached per outlet, busted by any menu/stock/settings change.
         const publicMenu = createPublicMenu({

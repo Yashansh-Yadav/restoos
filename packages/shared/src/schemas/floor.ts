@@ -121,3 +121,32 @@ export type FloorSection = z.infer<typeof floorSectionSchema>;
 
 export const floorSchema = z.object({ sections: z.array(floorSectionSchema) });
 export type Floor = z.infer<typeof floorSchema>;
+
+// ── Staff floor view (M3-T4) ────────────────────────────────────────────────
+
+export const staffFloorTableSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  seats: z.number().int(),
+  posX: z.number().int(),
+  posY: z.number().int(),
+  status: tableStatusSchema,
+  butlerId: z.string().nullable(),
+  butlerName: z.string().nullable(),
+  /** Assigned to the signed-in staff member this shift. */
+  mine: z.boolean(),
+  /** A bell is ringing or being answered (M8). */
+  activeBell: z.boolean(),
+  /** A customer order waits for staff approval (M5). */
+  pendingApproval: z.boolean(),
+  /** When the current guests sat down (open session), ISO time. */
+  since: z.string().nullable(),
+});
+export type StaffFloorTable = z.infer<typeof staffFloorTableSchema>;
+
+export const staffFloorSchema = z.object({
+  sections: z.array(
+    z.object({ id: z.string(), name: z.string(), tables: z.array(staffFloorTableSchema) }),
+  ),
+});
+export type StaffFloor = z.infer<typeof staffFloorSchema>;

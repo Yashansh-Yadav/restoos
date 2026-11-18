@@ -1,6 +1,8 @@
 // Real-time events (plan §8). Typed map shared by the API (publishEvent) and, from M4, the web
 // socket client. Until M4 attaches Socket.io, publishEvent is a no-op apart from listeners.
 
+import type { TableStatus } from "./enums";
+
 export type OutletEvents = {
   /** Anything on the menu changed (items, categories, add-ons, photos). */
   "menu.changed": { outletId: string };
@@ -12,6 +14,8 @@ export type OutletEvents = {
   "floor.changed": { outletId: string };
   /** Butlers were given or taken off tables (M3-T3). */
   "assignment.changed": { outletId: string };
+  /** A table moved through the state machine (M3-T4: seat, guests left, cleaning…). */
+  "table.statusChanged": { outletId: string; tableId: string; status: TableStatus };
 };
 
 export type OutletEventName = keyof OutletEvents;

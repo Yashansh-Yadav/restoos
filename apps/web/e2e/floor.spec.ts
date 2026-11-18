@@ -5,7 +5,10 @@ import { onboard, randomMobile, signInWithPhone } from "./helpers";
 // M3-T1 acceptance: owner sets up a section, bulk-adds tables, arranges and edits them.
 // M3-T2: prints the QR cards and gives one table a new code.
 
-test("owner sets up the floor: section, bulk tables, layout, edit, QR cards", async ({ page, request }) => {
+test("owner sets up the floor: section, bulk tables, layout, edit, QR cards", async ({
+  page,
+  request,
+}) => {
   await signInWithPhone(page, request, randomMobile());
   await expect(page).toHaveURL(/\/onboarding$/);
   await onboard(page);

@@ -20,3 +20,4 @@ export * from "./schemas/floor";
 export * from "./schemas/menu";
 export * from "./schemas/onboarding";
 export * from "./schemas/staff";
+export * from "./table-state";
