@@ -19,6 +19,9 @@ export const AUDIT_ACTIONS = [
   "outlet.settingsChanged",
   // Floor (M3-T2): old printed QR card stops working
   "table.rotateQr",
+  // Table operations (M5-T7): guests moved, tables merged
+  "table.transfer",
+  "table.merge",
   // Orders (M5-T5): an item taken off a table after it was sent
   "order.voidItem",
 ] as const;

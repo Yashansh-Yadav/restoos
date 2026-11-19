@@ -2,6 +2,7 @@
 
 import {
   formatINR,
+  isMovable,
   lineName,
   needsOptions,
   orderTotals,
@@ -11,8 +12,9 @@ import {
   type SentLine,
 } from "@restoos/shared";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, Loader2, Search, ShoppingBag } from "lucide-react";
+import { ArrowRightLeft, ChevronLeft, Loader2, Search, ShoppingBag } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
@@ -24,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { sendOrder } from "../api";
 import { orderError, orderPadKey, useOrderPad } from "../hooks";
 import { CartSheet } from "./cart-sheet";
+import { MoveSheet } from "./move-sheet";
 import { OptionsSheet, type Draft } from "./options-sheet";
 import { PendingOrderCard } from "./pending-order";
 import { VoidSheet } from "./void-sheet";
@@ -48,12 +51,19 @@ export function OrderScreen({
   tableId,
   initial,
   canVoid = false,
+  canMove = false,
+  flash = null,
 }: {
   tableId: string;
   initial: OrderPad;
   /** Managers and owners may void sent items (M5-T5); the API checks again. */
   canVoid?: boolean;
+  /** Cashiers, managers and owners may move guests / join tables (M5-T7). */
+  canMove?: boolean;
+  /** A message carried over from the previous screen (e.g. "Moved from T1"). */
+  flash?: string | null;
 }) {
+  const router = useRouter();
   const client = useQueryClient();
   const { data: pad } = useOrderPad(tableId, initial);
   const { status: live } = useOutletSocket();
@@ -65,7 +75,10 @@ export function OrderScreen({
   const [options, setOptions] = useState<{ draft: Draft; editKey?: string } | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
   const [sending, setSending] = useState(false);
-  const [notice, setNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const [notice, setNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(
+    flash ? { kind: "ok", text: flash } : null,
+  );
+  const [moving, setMoving] = useState(false);
   const [tableBusy, setTableBusy] = useState(false);
   const [voiding, setVoiding] = useState<SentLine | null>(null);
 
@@ -239,6 +252,12 @@ export function OrderScreen({
             {table.butlerName ?? "No butler"}
             <span className="sr-only">, {live === "live" ? "live" : "reconnecting"}</span>
           </span>
+          {canMove && isMovable(table.status) ? (
+            <Button variant="secondary" size="sm" onClick={() => setMoving(true)}>
+              <ArrowRightLeft aria-hidden="true" />
+              Move
+            </Button>
+          ) : null}
           {table.status === "FREE" || table.status === "OCCUPIED" ? (
             <Button
               variant="secondary"
@@ -482,6 +501,21 @@ export function OrderScreen({
                   },
                 }
               : {})}
+          />
+        ) : null}
+      </Sheet>
+
+      <Sheet open={moving} onOpenChange={setMoving}>
+        {moving ? (
+          <MoveSheet
+            table={table}
+            onMoved={(moved) => {
+              const text =
+                moved.kind === "transfer"
+                  ? `Moved from ${moved.from.label}`
+                  : `${moved.from.label} joined ${moved.to.label}`;
+              router.push(`/staff/tables/${moved.to.id}?moved=${encodeURIComponent(text)}`);
+            }}
           />
         ) : null}
       </Sheet>

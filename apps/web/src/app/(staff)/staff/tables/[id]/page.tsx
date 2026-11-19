@@ -8,7 +8,13 @@ import { getStaffMe } from "@/features/staff-auth/server";
 export const metadata: Metadata = { title: "Take Order" };
 
 // M5-T1: the butler taps a table on the floor and lands here — order straight away.
-export default async function TablePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function TablePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ moved?: string }>;
+}) {
   const me = await getStaffMe();
   if (!me) redirect("/staff");
   const { id } = await params;
@@ -28,9 +34,12 @@ export default async function TablePage({ params }: { params: Promise<{ id: stri
   if (!pad) redirect("/staff");
   return (
     <OrderScreen
+      key={id}
       tableId={id}
       initial={pad}
       canVoid={me.permissions.includes("order.voidItem")}
+      canMove={me.permissions.includes("table.move")}
+      flash={(await searchParams).moved?.slice(0, 80) ?? null}
     />
   );
 }

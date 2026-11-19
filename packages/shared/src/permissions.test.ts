@@ -15,6 +15,7 @@ const MATRIX: Record<Permission, [number, number, number, number, number, number
   "menu.toggleStock":           [1, 1, 1, 1, 0, 1],
   "floor.edit":                 [1, 1, 1, 0, 0, 0],
   "table.assign":               [1, 1, 1, 0, 0, 0],
+  "table.move":                 [1, 1, 1, 1, 0, 0],
   "order.create":               [1, 1, 1, 1, 1, 0],
   "order.voidItem":             [1, 1, 1, 0, 0, 0],
   "kot.updateStatus":           [1, 1, 1, 0, 0, 1],

@@ -1,6 +1,8 @@
 import {
   apiErrorSchema,
   manualTableEventSchema,
+  movedTableSchema,
+  moveTableSchema,
   staffFloorSchema,
   tableStatusSchema,
 } from "@restoos/shared";
@@ -64,5 +66,21 @@ export const tableRoutes =
         const t = await tables.changeStatus(deps(request), request.params.id, request.body.event);
         return { id: t.id, label: t.label, status: t.status };
       },
+    );
+
+    // M5-T7: move guests to a free table, or join this table's orders to another (audited).
+    app.post(
+      "/staff/tables/:id/move",
+      {
+        preHandler: [m.resolveTenant, m.requirePermission("table.move"), m.requireOutlet],
+        schema: {
+          tags,
+          summary: "Move this table's guests to a free table, or merge it into another table",
+          params: z.object({ id: z.string().min(1) }),
+          body: moveTableSchema,
+          response: { 200: movedTableSchema, ...errors },
+        },
+      },
+      (request) => tables.moveTable(deps(request), request.params.id, request.body),
     );
   };

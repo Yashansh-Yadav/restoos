@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { TableStatus } from "./enums";
+import { tableStatusSchema, type TableStatus } from "./enums";
 
 // Table status state machine (plan §5.6, M3-T4). The only place the rules live: the API's
 // transitionTable() enforces them, the staff floor screen uses them to offer valid actions.
@@ -68,3 +68,38 @@ export function canTransition(from: TableStatus, event: TableEvent): boolean {
 export function allowedEvents(from: TableStatus): TableEvent[] {
   return TABLE_EVENTS.filter((e) => canTransition(from, e));
 }
+
+// ── Move / merge (M5-T7) ────────────────────────────────────────────────────
+
+/** Tables whose guests can be moved or merged (an open session, nothing paid yet). */
+export const MOVABLE_STATUSES = [
+  "OCCUPIED",
+  "ORDERED",
+  "BILL_REQUESTED",
+] as const satisfies readonly TableStatus[];
+
+export const isMovable = (s: TableStatus) =>
+  (MOVABLE_STATUSES as readonly TableStatus[]).includes(s);
+
+/**
+ * The target's status after another table's orders join it: a bill stays requested only if both
+ * had asked for one; any orders make it Ordered; otherwise the guests are just seated.
+ */
+export function mergedStatus(target: TableStatus, source: TableStatus): TableStatus {
+  if (target === "BILL_REQUESTED" && source === "BILL_REQUESTED") return "BILL_REQUESTED";
+  const hasOrders = (s: TableStatus) => s === "ORDERED" || s === "BILL_REQUESTED";
+  return hasOrders(target) || hasOrders(source) ? "ORDERED" : "OCCUPIED";
+}
+
+export const moveTableSchema = z.object({
+  toTableId: z.string().min(1),
+  kind: z.enum(["transfer", "merge"]),
+});
+export type MoveTableInput = z.infer<typeof moveTableSchema>;
+
+export const movedTableSchema = z.object({
+  kind: z.enum(["transfer", "merge"]),
+  from: z.object({ id: z.string(), label: z.string() }),
+  to: z.object({ id: z.string(), label: z.string(), status: tableStatusSchema }),
+});
+export type MovedTable = z.infer<typeof movedTableSchema>;

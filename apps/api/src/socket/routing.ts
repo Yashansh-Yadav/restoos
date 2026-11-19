@@ -24,6 +24,8 @@ export const EVENT_ROUTES: { readonly [K in OutletEventName]: readonly Audience[
   // M5-T6b: guest orders. Customers get ids only and refetch their own table's list.
   "order.pendingApproval": ["staff", "owner", "customers"],
   "order.statusChanged": ["staff", "owner", "customers", "kitchen"],
+  // M5-T7: ticket labels follow the session — the kitchen and floor refetch.
+  "table.moved": ["staff", "owner", "kitchen"],
 };
 
 const roomOf: Record<Audience, (outletId: string) => string> = {

@@ -18,6 +18,7 @@ export const EVENT_QUERY_PREFIXES: { readonly [K in OutletEventName]: readonly Q
   // M5-T6b: guest orders — the floor badge, the order screen's waiting card, the guest's list.
   "order.pendingApproval": [["staff-floor"], ["order-pad"], ["table-orders"]],
   "order.statusChanged": [["staff-floor"], ["order-pad"], ["table-orders"], ["kitchen"]],
+  "table.moved": [["staff-floor"], ["order-pad"], ["kitchen"], ["ready"], ["table-orders"]],
 };
 
 /** Every key any event touches: refetched after a reconnect, in case events were missed. */

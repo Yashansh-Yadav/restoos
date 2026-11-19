@@ -14,7 +14,7 @@ import type { TenantContext, TenantDb } from "./tenant";
 // through here, so the state machine in @restoos/shared is enforced in one place. It also opens
 // and closes the TableSession.
 
-const STATUS_WORDS: Record<TableStatus, string> = {
+export const STATUS_WORDS: Record<TableStatus, string> = {
   FREE: "free",
   OCCUPIED: "seated",
   ORDERED: "ordering",
@@ -125,4 +125,22 @@ export async function transitionTable(
   const result = await db.$transaction((tx) => applyTableTransition(tx, ctx, tableId, event));
   await publishTableStatus(events, ctx, result);
   return result;
+}
+
+/**
+ * Sets a table's status outside the state machine (move / merge, M5-T7), guarded on the status
+ * the caller read: a concurrent change makes it 409 TABLE_CHANGED instead of overwriting.
+ */
+export async function setTableStatus(
+  tx: TableTx,
+  table: { id: string; label: string; status: TableStatus },
+  to: TableStatus,
+): Promise<void> {
+  const moved = await tx.diningTable.updateMany({
+    where: { id: table.id, status: table.status },
+    data: { status: to },
+  });
+  if (moved.count === 0) {
+    throw new AppError(409, "TABLE_CHANGED", `${table.label} just changed. Check it again.`);
+  }
 }

@@ -3,7 +3,9 @@ import {
   orderDecisionSchema,
   orderPadSchema,
   voidedItemSchema,
+  movedTableSchema,
   type CreateOrderInput,
+  type MoveTableInput,
   type RejectOrderInput,
   type VoidItemInput,
 } from "@restoos/shared";
@@ -41,6 +43,14 @@ export const approveOrder = (orderId: string) =>
 /** M5-T6b: turn a guest order down (the guest sees the reason). */
 export const rejectOrder = (orderId: string, body: RejectOrderInput) =>
   apiFetch(`/api/staff/orders/${encodeURIComponent(orderId)}/reject`, orderDecisionSchema, {
+    method: "POST",
+    credentials: "same-origin",
+    body: JSON.stringify(body),
+  });
+
+/** M5-T7: move this table's guests to a free table, or join its orders to another table. */
+export const moveTable = (tableId: string, body: MoveTableInput) =>
+  apiFetch(`/api/staff/tables/${encodeURIComponent(tableId)}/move`, movedTableSchema, {
     method: "POST",
     credentials: "same-origin",
     body: JSON.stringify(body),

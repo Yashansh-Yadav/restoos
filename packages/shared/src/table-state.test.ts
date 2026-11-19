@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { tableStatusSchema, type TableStatus } from "./enums";
 import {
+  isMovable,
+  mergedStatus,
   allowedEvents,
   InvalidTableTransition,
   MANUAL_TABLE_EVENTS,
@@ -70,5 +72,26 @@ describe("table state machine (M3-T4, plan §5.6)", () => {
   it("only seat, unseat, clear and cleaned are manual", () => {
     expect([...MANUAL_TABLE_EVENTS]).toEqual(["seat", "unseat", "clear", "cleaned"]);
     expect(manualTableEventSchema.safeParse("pay").success).toBe(false);
+  });
+});
+
+describe("move / merge (M5-T7)", () => {
+  it("only tables with guests who haven't paid can be moved or merged", () => {
+    expect(tableStatusSchema.options.filter(isMovable)).toEqual([
+      "OCCUPIED",
+      "ORDERED",
+      "BILL_REQUESTED",
+    ]);
+  });
+
+  it("works out the joined table's status", () => {
+    expect(mergedStatus("OCCUPIED", "OCCUPIED")).toBe("OCCUPIED");
+    expect(mergedStatus("OCCUPIED", "ORDERED")).toBe("ORDERED");
+    expect(mergedStatus("ORDERED", "OCCUPIED")).toBe("ORDERED");
+    // More food joins a table waiting for its bill: back to ordering.
+    expect(mergedStatus("BILL_REQUESTED", "ORDERED")).toBe("ORDERED");
+    expect(mergedStatus("BILL_REQUESTED", "OCCUPIED")).toBe("ORDERED");
+    expect(mergedStatus("ORDERED", "BILL_REQUESTED")).toBe("ORDERED");
+    expect(mergedStatus("BILL_REQUESTED", "BILL_REQUESTED")).toBe("BILL_REQUESTED");
   });
 });

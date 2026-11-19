@@ -135,6 +135,6 @@ describe("tenant resolution + permission checks", () => {
     await onboardOwner();
     const me = (await h.request("GET", "/api/me")).json<{ owner: { permissions: string[] } }>();
     expect(me.owner.permissions).toContain("billing.manageSubscription");
-    expect(me.owner.permissions).toHaveLength(16);
+    expect(me.owner.permissions).toHaveLength(17);
   });
 });

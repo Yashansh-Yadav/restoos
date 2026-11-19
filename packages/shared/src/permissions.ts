@@ -6,6 +6,8 @@ export const PERMISSIONS = [
   "menu.toggleStock",
   "floor.edit",
   "table.assign",
+  /** Move guests to another table / merge tables (M5-T7, audited). */
+  "table.move",
   "order.create",
   "order.voidItem",
   "kot.updateStatus",
@@ -34,6 +36,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   MANAGER: ALL.filter((p) => p !== "billing.manageSubscription"),
   CASHIER: [
     "menu.toggleStock",
+    "table.move", // the counter usually handles seating (user decision 2026-11-19)
     "order.create",
     "bill.create",
     "bill.discount", // capped by outlet.maxCashierDiscountBps — checked with the resource in can()
