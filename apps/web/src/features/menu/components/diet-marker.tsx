@@ -17,17 +17,22 @@ export function DietMarker({
   diet,
   className,
   decorative = false,
+  label,
 }: {
   diet: DietType;
   className?: string;
   /** True when the diet is already written next to it (avoids reading it twice). */
   decorative?: boolean;
+  /** Translated label (customer screens); defaults to the English one. */
+  label?: string;
 }) {
   return (
     <svg
       viewBox="0 0 16 16"
       className={cn("size-4 shrink-0", COLOR[diet], className)}
-      {...(decorative ? { "aria-hidden": true } : { role: "img", "aria-label": LABEL[diet] })}
+      {...(decorative
+        ? { "aria-hidden": true }
+        : { role: "img", "aria-label": label ?? LABEL[diet] })}
     >
       <rect
         x="1"

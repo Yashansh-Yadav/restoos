@@ -152,4 +152,8 @@
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
+  /* DESIGN.md §3: Devanagari needs ~10% more line-height so matras don't clip. */
+  :lang(hi) {
+    line-height: 1.65;
+  }
 }

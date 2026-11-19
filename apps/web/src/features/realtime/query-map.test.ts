@@ -28,6 +28,7 @@ describe("live event → query map (M4-T3)", () => {
       [{ queryKey: ["menu"] }],
       [{ queryKey: ["stock"] }],
       [{ queryKey: ["order-pad"] }],
+      [{ queryKey: ["public-menu"] }],
     ]);
   });
 

@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
 import { EnvError } from "@restoos/shared/env";
 import { loadRootEnv } from "@restoos/shared/env/node";
 import { loadWebClientEnv, loadWebServerEnv } from "./src/env";
@@ -28,4 +29,7 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// next-intl (M5-T6a): locale + messages per request from src/i18n/request.ts (cookie-based).
+const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
+
+export default withNextIntl(nextConfig);

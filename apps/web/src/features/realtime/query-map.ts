@@ -5,9 +5,9 @@ import type { QueryClient, QueryKey } from "@tanstack/react-query";
 // new event has to say what it refreshes. Prefix keys: ["menu"] refreshes every outlet's menu.
 
 export const EVENT_QUERY_PREFIXES: { readonly [K in OutletEventName]: readonly QueryKey[] } = {
-  "menu.changed": [["menu"], ["stock"], ["order-pad"]],
-  "menu.stockChanged": [["menu"], ["stock"], ["order-pad"]],
-  "outlet.settingsChanged": [["menu"], ["stock"], ["order-pad"]],
+  "menu.changed": [["menu"], ["stock"], ["order-pad"], ["public-menu"]],
+  "menu.stockChanged": [["menu"], ["stock"], ["order-pad"], ["public-menu"]],
+  "outlet.settingsChanged": [["menu"], ["stock"], ["order-pad"], ["public-menu"]],
   "floor.changed": [["floor"], ["staff-floor"], ["assignments"]],
   "assignment.changed": [["assignments"], ["staff-floor"]],
   "table.statusChanged": [["staff-floor"], ["order-pad"]],

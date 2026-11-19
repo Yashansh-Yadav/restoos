@@ -4,8 +4,9 @@ import { OUTLET_EVENT_NAMES, type ServerToClientEvents } from "@restoos/shared";
 import { io, type Socket } from "socket.io-client";
 
 // One live connection per browser tab and identity (M4-T3): the staff device session, or the
-// owner working in one outlet. Screens share it (reference-counted) and it closes when the last
-// one unmounts. Same origin as the API (/api/socket.io, no trailing slash — see M4-T1).
+// owner working in one outlet, or a guest's phone on a table QR (M5-T6a: auth.qrToken → the
+// table room + the outlet's public room). Screens share it (reference-counted) and it closes
+// when the last one unmounts. Same origin as the API (/api/socket.io, no trailing slash — see M4-T1).
 
 export type LiveStatus = "connecting" | "live" | "offline";
 type Listener = {
@@ -38,12 +39,12 @@ function setStatus(entry: Entry, status: LiveStatus) {
   for (const l of entry.listeners) l.onStatus(status);
 }
 
-function create(key: string, outletId: string | undefined): Entry {
+function create(key: string, auth: Record<string, string>): Entry {
   const socket: Socket<ServerToClientEvents> = io({
     path: PATH,
     addTrailingSlash: false,
     withCredentials: true,
-    auth: outletId ? { outletId } : {},
+    auth,
     reconnectionDelay: 1_000,
     reconnectionDelayMax: 10_000,
   });
@@ -84,8 +85,16 @@ function create(key: string, outletId: string | undefined): Entry {
 
 /** Joins (or opens) the tab's connection; returns a function that leaves it. */
 export function subscribeLive(outletId: string | undefined, listener: Listener): () => void {
-  const key = outletId ?? "device";
-  const entry = entries.get(key) ?? create(key, outletId);
+  return join(outletId ?? "device", outletId ? { outletId } : {}, listener);
+}
+
+/** A guest's phone on the table page (no login): live menu, stock and, later, bell/bill. */
+export function subscribeTable(qrToken: string, listener: Listener): () => void {
+  return join(`table:${qrToken}`, { qrToken }, listener);
+}
+
+function join(key: string, auth: Record<string, string>, listener: Listener): () => void {
+  const entry = entries.get(key) ?? create(key, auth);
   entry.listeners.add(listener);
   listener.onStatus(entry.status);
   // A tablet waking up: reconnect now rather than after the backoff.
