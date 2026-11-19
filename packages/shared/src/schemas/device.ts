@@ -92,7 +92,11 @@ export type StaffMe = z.infer<typeof staffMeResponseSchema>;
 /** POST /api/staff/shift/start */
 export const shiftSchema = z.object({ id: z.string(), startedAt: z.iso.datetime() });
 
-/** GET/PATCH /api/owner/outlet/settings (M1-T7: shift auto-start; more settings later). */
-export const outletSettingsSchema = z.object({ autoStartShift: z.boolean() });
+/** GET/PATCH /api/owner/outlet/settings (M1-T7 shift auto-start; M5-T3 kitchen late time). */
+export const outletSettingsSchema = z.object({
+  autoStartShift: z.boolean(),
+  /** Kitchen display marks a ticket late after this many minutes (M5-T3). */
+  kotLateMinutes: z.number().int().min(5, "At least 5 minutes").max(120, "At most 120 minutes"),
+});
 export const updateOutletSettingsSchema = outletSettingsSchema.partial();
 export type OutletSettings = z.infer<typeof outletSettingsSchema>;

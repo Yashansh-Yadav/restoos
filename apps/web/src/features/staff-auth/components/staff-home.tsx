@@ -3,6 +3,7 @@
 import type { StaffMe } from "@restoos/shared";
 import {
   Armchair,
+  ChefHat,
   ChevronRight,
   Clock,
   LayoutGrid,
@@ -88,6 +89,22 @@ export function StaffHome({ me }: { me: StaffMe }) {
           )}
         </div>
       </div>
+
+      {me.permissions.includes("kot.updateStatus") ? (
+        <Link
+          href="/staff/kitchen"
+          className="flex min-h-touch-hero [touch-action:manipulation] items-center gap-4 rounded-md border border-border px-4 py-3 transition-colors duration-150 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:bg-secondary"
+        >
+          <ChefHat className="size-7 shrink-0" aria-hidden="true" />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="text-lg font-semibold">Kitchen Display</span>
+            <span className="text-sm text-muted-foreground">
+              Tickets to cook — tap to start and mark ready
+            </span>
+          </span>
+          <ChevronRight className="size-6 shrink-0 text-muted-foreground" aria-hidden="true" />
+        </Link>
+      ) : null}
 
       {me.permissions.includes("order.create") ? (
         <Link

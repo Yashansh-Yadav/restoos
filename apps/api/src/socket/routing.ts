@@ -18,6 +18,7 @@ export const EVENT_ROUTES: { readonly [K in OutletEventName]: readonly Audience[
   // §8: staff + kitchen (the kitchen display arrives in M5-T3).
   "order.created": ["staff", "kitchen"],
   "kot.created": ["kitchen", "staff"],
+  "kot.itemStatusChanged": ["kitchen", "staff"],
 };
 
 const roomOf: Record<Audience, (outletId: string) => string> = {

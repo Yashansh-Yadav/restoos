@@ -22,6 +22,7 @@ import { floorRoutes } from "./modules/floor/routes";
 import { healthRoutes } from "./modules/health/routes";
 import { deviceAuthRoutes } from "./modules/device-auth/routes";
 import { deviceRoutes } from "./modules/devices/routes";
+import { kitchenRoutes } from "./modules/kitchen/routes";
 import { menuRoutes } from "./modules/menu/routes";
 import { meRoutes } from "./modules/me/routes";
 import { buildModuleDeps } from "./module-deps";
@@ -134,6 +135,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
         await api.register(assignmentRoutes(moduleDeps));
         await api.register(tableRoutes(moduleDeps));
         await api.register(orderRoutes(moduleDeps));
+        await api.register(kitchenRoutes(moduleDeps));
 
         // Customer menu (M2-T5): cached per outlet, busted by any menu/stock/settings change.
         const publicMenu = createPublicMenu({

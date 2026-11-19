@@ -2,6 +2,7 @@
 // socket client. Until M4 attaches Socket.io, publishEvent is a no-op apart from listeners.
 
 import type { TableStatus } from "./enums";
+import type { KotStage } from "./kot-state";
 
 export type OutletEvents = {
   /** Anything on the menu changed (items, categories, add-ons, photos). */
@@ -26,6 +27,13 @@ export type OutletEvents = {
     orderId: string;
     tableId: string;
   };
+  /** The kitchen moved a ticket to New / Preparing / Ready (M5-T3). */
+  "kot.itemStatusChanged": {
+    outletId: string;
+    kotId: string;
+    tableId: string | null;
+    stage: KotStage;
+  };
 };
 
 export type OutletEventName = keyof OutletEvents;
@@ -48,6 +56,7 @@ export const OUTLET_EVENT_NAMES = [
   "table.statusChanged",
   "order.created",
   "kot.created",
+  "kot.itemStatusChanged",
 ] as const satisfies readonly OutletEventName[];
 type MissingEventName = Exclude<OutletEventName, (typeof OUTLET_EVENT_NAMES)[number]>;
 // Compile-time check: adding an event to OutletEvents without listing it here fails the build.

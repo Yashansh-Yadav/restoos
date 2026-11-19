@@ -5,7 +5,8 @@ import { notFound } from "../../lib/errors";
 import type { ModuleDeps } from "../../module-deps";
 import { outletOf, tenantOf } from "../../plugins/tenant";
 
-// /api/owner/outlet/settings (M1-T7): outlet-level switches. Today: shift auto-start. Guarded by
+// /api/owner/outlet/settings (M1-T7): outlet-level switches — shift auto-start, kitchen late time
+// (M5-T3). Guarded by
 // staff.manage until a general settings permission exists (it's a staff-scheduling setting).
 
 const errors = {
@@ -14,7 +15,7 @@ const errors = {
   403: apiErrorSchema,
   404: apiErrorSchema,
 };
-const select = { autoStartShift: true };
+const select = { autoStartShift: true, kotLateMinutes: true };
 
 export const outletSettingsRoutes =
   (m: ModuleDeps): FastifyPluginAsyncZod =>

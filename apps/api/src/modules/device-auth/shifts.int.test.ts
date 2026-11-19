@@ -57,7 +57,7 @@ describe("shifts", () => {
   it("with auto-start off, staff tap Start Shift (idempotent)", async () => {
     const { r, arjun } = await setup();
     const set = await r.owner("PATCH", "/api/owner/outlet/settings", { autoStartShift: false });
-    expect(set.json()).toEqual({ autoStartShift: false });
+    expect(set.json()).toMatchObject({ autoStartShift: false });
 
     const tablet = await r.signedInTablet(arjun.id, "3001");
     expect((await me(tablet)).shift).toBeNull();

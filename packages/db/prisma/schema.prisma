@@ -136,6 +136,7 @@ model Outlet {
   fssaiNumber           String?
   pricesIncludeTax      Boolean      @default(false)
   serviceChargeBps      Int          @default(0) // 0 = off (must stay optional, plan §5.1)
+  kotLateMinutes        Int          @default(15) // kitchen display: a ticket is late after this (M5-T3)
   maxCashierDiscountBps Int          @default(1000)
   bellTimeoutSeconds    Int          @default(30)
   googleReviewUrl       String?
