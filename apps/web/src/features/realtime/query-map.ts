@@ -14,6 +14,7 @@ export const EVENT_QUERY_PREFIXES: { readonly [K in OutletEventName]: readonly Q
   "order.created": [["staff-floor"], ["order-pad"]],
   "kot.created": [["kitchen"], ["order-pad"], ["staff-floor"]],
   "kot.itemStatusChanged": [["kitchen"], ["order-pad"], ["staff-floor"], ["ready"]],
+  "order.itemVoided": [["kitchen"], ["order-pad"], ["ready"]],
 };
 
 /** Every key any event touches: refetched after a reconnect, in case events were missed. */

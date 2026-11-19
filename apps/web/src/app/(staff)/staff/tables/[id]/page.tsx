@@ -26,5 +26,11 @@ export default async function TablePage({ params }: { params: Promise<{ id: stri
   }
   const pad = await getOrderPadForStaff(id);
   if (!pad) redirect("/staff");
-  return <OrderScreen tableId={id} initial={pad} />;
+  return (
+    <OrderScreen
+      tableId={id}
+      initial={pad}
+      canVoid={me.permissions.includes("order.voidItem")}
+    />
+  );
 }

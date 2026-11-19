@@ -543,6 +543,7 @@ model OrderItem {
   kotId          String?
   voidReason     String?
   voidedById     String?
+  voidedAt       DateTime?
   addOns         Json // [{ addOnId, name, price }]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt

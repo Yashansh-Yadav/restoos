@@ -1,13 +1,15 @@
 "use client";
 
 import { formatINR, type SentLine } from "@restoos/shared";
-import { Loader2, Minus, Plus, SlidersHorizontal } from "lucide-react";
+import { Ban, Loader2, Minus, Plus, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SheetContent } from "@/components/ui/sheet";
+import { cn } from "@/lib/utils";
 import type { CartLine } from "./order-screen";
 
 // The table's order (M5-T1): new items with − / + steppers and Options, what's already been
-// sent, and the running total with GST (same maths as the bill).
+// sent, and the running total with GST (same maths as the bill). Managers get "Void" on sent
+// lines (M5-T5); voided lines stay listed, struck through, with the reason.
 
 /** What a sent line is doing now (kitchen states arrive with M5-T3/T4). */
 const ITEM_STATUS: Record<SentLine["status"], string> = {
@@ -30,6 +32,7 @@ export function CartSheet({
   onOptions,
   sending,
   onSend,
+  onVoid,
 }: {
   lines: Row[];
   sent: SentLine[];
@@ -39,6 +42,8 @@ export function CartSheet({
   onOptions: (line: CartLine) => void;
   sending: boolean;
   onSend: () => void;
+  /** Only passed for users who may void (order.voidItem). */
+  onVoid?: (line: SentLine) => void;
 }) {
   return (
     <SheetContent title="Order">
@@ -111,29 +116,58 @@ export function CartSheet({
               Already sent
             </h3>
             <ul className="flex flex-col gap-1.5">
-              {sent.map((l) => (
-                <li key={l.id} className="flex items-start justify-between gap-3 text-base">
-                  <span className="min-w-0">
-                    <span className="tabular-nums">{l.quantity} × </span>
-                    {l.name}
-                    {l.addOns.length > 0 ? (
-                      <span className="text-sm text-muted-foreground">
-                        {" "}
-                        + {l.addOns.join(", ")}
-                        <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
-                          {ITEM_STATUS[l.status]}
-                        </span>
+              {sent.map((l) => {
+                const voided = l.status === "VOIDED";
+                return (
+                  <li key={l.id} className="flex items-center justify-between gap-3 text-base">
+                    <span className={cn("min-w-0", voided && "text-muted-foreground")}>
+                      <span className={cn(voided && "line-through")}>
+                        <span className="tabular-nums">{l.quantity} × </span>
+                        {l.name}
+                        {l.addOns.length > 0 ? (
+                          <span className="text-sm text-muted-foreground">
+                            {" "}
+                            + {l.addOns.join(", ")}
+                          </span>
+                        ) : null}
                       </span>
-                    ) : null}
-                    <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
-                      {ITEM_STATUS[l.status]}
+                      <span
+                        className={cn(
+                          "ml-2 rounded-full px-2 py-0.5 text-xs font-semibold",
+                          voided
+                            ? "bg-destructive/10 text-destructive"
+                            : "bg-muted text-muted-foreground",
+                        )}
+                      >
+                        {ITEM_STATUS[l.status]}
+                        {voided && l.voidReason ? ` · ${l.voidReason}` : ""}
+                      </span>
                     </span>
-                  </span>
-                  <span className="text-muted-foreground tabular-nums">
-                    {formatINR(l.unitPrice * l.quantity)}
-                  </span>
-                </li>
-              ))}
+                    <span className="flex shrink-0 items-center gap-1">
+                      <span
+                        className={cn(
+                          "text-muted-foreground tabular-nums",
+                          voided && "line-through",
+                        )}
+                      >
+                        {formatINR(l.unitPrice * l.quantity)}
+                      </span>
+                      {onVoid && !voided ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive"
+                          aria-label={`Void ${l.quantity} × ${l.name}`}
+                          onClick={() => onVoid(l)}
+                        >
+                          <Ban aria-hidden="true" />
+                          Void
+                        </Button>
+                      ) : null}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           </section>
         ) : null}

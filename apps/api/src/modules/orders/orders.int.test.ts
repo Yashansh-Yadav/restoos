@@ -1,5 +1,6 @@
 // M5-T1: the staff order pad and "Send to kitchen" — server pricing + snapshots, sizes and
 // add-ons, the table seated on the first send, clientId idempotency, stock and permission checks.
+// M5-T5: voiding sent items (whole or partial), the guards, the audit row and who may void.
 import { seedPlans } from "@restoos/db/testing";
 import {
   addOnGroupSchema,
@@ -7,9 +8,11 @@ import {
   createdOrderSchema,
   floorSectionSchema,
   floorTableSchema,
+  kitchenBoardSchema,
   menuCategorySchema,
   menuItemSchema,
   orderPadSchema,
+  voidedItemSchema,
   type OutletEvent,
 } from "@restoos/shared";
 import type { LightMyRequestResponse } from "fastify";
@@ -240,5 +243,193 @@ describe("staff ordering (M5-T1)", () => {
       items: [{ itemId: dal.id, quantity: 1 }],
     });
     expect(code(theirs)).toBe("NOT_FOUND");
+  });
+});
+
+describe("voiding sent items (M5-T5)", () => {
+  const items = async (orderId: string) =>
+    h.prisma.orderItem.findMany({ where: { orderId }, orderBy: { createdAt: "asc" } });
+
+  it("voids part of a line (split) and then a whole line; audited, evented, kitchen sees it", async () => {
+    const { r, t1, dal, soda, send, pad } = await setup();
+    const order = createdOrderSchema.parse(
+      (
+        await send({
+          clientId: clientId(),
+          tableId: t1.id,
+          items: [
+            { itemId: dal.id, quantity: 3 },
+            { itemId: soda.id, quantity: 1 },
+          ],
+        })
+      ).json(),
+    );
+    const lines = await items(order.id);
+    const dalLine = lines.find((l) => l.nameSnapshot === "Dal Makhani");
+    const sodaLine = lines.find((l) => l.nameSnapshot === "Soda");
+    if (!dalLine || !sodaLine) throw new Error("lines missing");
+    const meena = await r.addStaff("Meena", "MANAGER", "6150");
+    const manager = await r.signedInTablet(meena.id, "6150");
+    const events: OutletEvent[] = [];
+    const off = h.app.events.subscribe((_ctx, e) => {
+      events.push(e);
+    });
+
+    // 3 × Dal → void 1: the line keeps 2, a VOIDED copy of 1 carries the same snapshots.
+    const part = await manager.call("POST", `/api/staff/order-items/${dalLine.id}/void`, {
+      quantity: 1,
+      fromQuantity: 3,
+      reason: "Guest changed mind",
+    });
+    expect(part.statusCode, part.body).toBe(200);
+    const voided = voidedItemSchema.parse(part.json());
+    expect(voided).toMatchObject({ quantity: 1, remaining: 2 });
+    expect(voided.id).not.toBe(dalLine.id);
+    const after = await items(order.id);
+    const kept = after.find((i) => i.id === dalLine.id);
+    const copy = after.find((i) => i.id === voided.id);
+    expect(kept).toMatchObject({ quantity: 2, status: "SENT", voidReason: null });
+    expect(copy).toMatchObject({
+      quantity: 1,
+      status: "VOIDED",
+      nameSnapshot: "Dal Makhani",
+      unitPrice: dalLine.unitPrice,
+      taxRateBps: dalLine.taxRateBps,
+      kotId: dalLine.kotId,
+      voidReason: "Guest changed mind",
+      voidedById: meena.id,
+    });
+    expect(copy?.voidedAt).toBeInstanceOf(Date);
+
+    // The same request again (a retry) no longer matches the quantity seen: nothing doubles.
+    const retry = await manager.call("POST", `/api/staff/order-items/${dalLine.id}/void`, {
+      quantity: 1,
+      fromQuantity: 3,
+      reason: "Guest changed mind",
+    });
+    expect(retry.statusCode).toBe(409);
+    expect(code(retry)).toBe("LINE_CHANGED");
+
+    // Whole line: the soda flips to VOIDED; voiding it again is refused.
+    const whole = await manager.call("POST", `/api/staff/order-items/${sodaLine.id}/void`, {
+      quantity: 1,
+      fromQuantity: 1,
+      reason: "Wrong item entered",
+    });
+    expect(whole.statusCode, whole.body).toBe(200);
+    expect(voidedItemSchema.parse(whole.json())).toEqual({
+      id: sodaLine.id,
+      quantity: 1,
+      remaining: 0,
+    });
+    const again = await manager.call("POST", `/api/staff/order-items/${sodaLine.id}/void`, {
+      quantity: 1,
+      fromQuantity: 1,
+      reason: "Wrong item entered",
+    });
+    expect(code(again)).toBe("ALREADY_VOIDED");
+    off();
+
+    // Audited in the same transaction, one row per void, with what and why.
+    const audits = await h.prisma.auditLog.findMany({
+      where: { action: "order.voidItem" },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(audits.map((a) => [a.entityId, a.actorType, a.actorId])).toEqual([
+      [voided.id, "EMPLOYEE", meena.id],
+      [sodaLine.id, "EMPLOYEE", meena.id],
+    ]);
+    expect(audits[0]?.data).toMatchObject({
+      sourceItemId: dalLine.id,
+      name: "Dal Makhani",
+      quantity: 1,
+      reason: "Guest changed mind",
+      statusBefore: "SENT",
+    });
+    expect(events.filter((e) => e.name === "order.itemVoided").map((e) => e.payload)).toEqual([
+      expect.objectContaining({ tableId: t1.id, kotId: dalLine.kotId, itemId: voided.id }),
+      expect.objectContaining({ tableId: t1.id, kotId: sodaLine.kotId, itemId: sodaLine.id }),
+    ]);
+
+    // The order pad lists the voids with their reasons; the kitchen ticket shows them too.
+    const p = await pad(t1.id);
+    expect(p.sent.map((l) => [l.name, l.quantity, l.status, l.voidReason])).toEqual(
+      expect.arrayContaining([
+        ["Dal Makhani", 2, "SENT", null],
+        ["Soda", 1, "VOIDED", "Wrong item entered"],
+        ["Dal Makhani", 1, "VOIDED", "Guest changed mind"],
+      ]),
+    );
+    expect(p.sent).toHaveLength(3);
+    const board = kitchenBoardSchema.parse((await r.owner("GET", "/api/staff/kitchen")).json());
+    expect(board.kots).toHaveLength(1);
+    expect(board.kots[0]?.items.map((i) => [i.name, i.quantity, i.status])).toEqual(
+      expect.arrayContaining([
+        ["Dal Makhani", 2, "SENT"],
+        ["Dal Makhani", 1, "VOIDED"],
+        ["Soda", 1, "VOIDED"],
+      ]),
+    );
+
+    // Void what is left: nothing to cook, so the ticket leaves the board.
+    const rest = await manager.call("POST", `/api/staff/order-items/${dalLine.id}/void`, {
+      quantity: 2,
+      fromQuantity: 2,
+      reason: "Out of stock",
+    });
+    expect(rest.statusCode, rest.body).toBe(200);
+    const empty = kitchenBoardSchema.parse((await r.owner("GET", "/api/staff/kitchen")).json());
+    expect(empty.kots).toHaveLength(0);
+  });
+
+  it("checks the input, who may void, and keeps other restaurants out", async () => {
+    const { r, t1, dal, send } = await setup();
+    const order = createdOrderSchema.parse(
+      (
+        await send({
+          clientId: clientId(),
+          tableId: t1.id,
+          items: [{ itemId: dal.id, quantity: 2 }],
+        })
+      ).json(),
+    );
+    const [line] = await items(order.id);
+    if (!line) throw new Error("line missing");
+    const url = `/api/staff/order-items/${line.id}/void`;
+
+    // Bad input: no reason, more than the line has.
+    expect(
+      (await r.owner("POST", url, { quantity: 1, fromQuantity: 2, reason: "  " })).statusCode,
+    ).toBe(400);
+    expect(
+      (await r.owner("POST", url, { quantity: 3, fromQuantity: 2, reason: "Quality issue" }))
+        .statusCode,
+    ).toBe(400);
+
+    // Butlers and the kitchen can not void.
+    const rahul = await r.addStaff("Rahul", "BUTLER", "4827");
+    const butler = await r.signedInTablet(rahul.id, "4827");
+    const body = { quantity: 1, fromQuantity: 2, reason: "Quality issue" };
+    expect((await butler.call("POST", url, body)).statusCode).toBe(403);
+    const imran = await r.addStaff("Imran", "KITCHEN", "5938");
+    const kitchen = await r.signedInTablet(imran.id, "5938");
+    expect((await kitchen.call("POST", url, body)).statusCode).toBe(403);
+
+    // Another restaurant (its owner): not found.
+    const ownerJar = new Map(h.jar);
+    h.clearCookies();
+    const other = await restaurant(h, "+919876500002");
+    expect(code(await other.owner("POST", url, body))).toBe("NOT_FOUND");
+    expect((await h.prisma.orderItem.findUniqueOrThrow({ where: { id: line.id } })).quantity).toBe(
+      2,
+    );
+
+    // The owner (no employee id) may void.
+    h.clearCookies();
+    for (const [k, v] of ownerJar) h.jar.set(k, v);
+    const ok = await r.owner("POST", url, body);
+    expect(ok.statusCode, ok.body).toBe(200);
+    const split = await h.prisma.orderItem.findFirstOrThrow({ where: { status: "VOIDED" } });
+    expect(split.voidedById).toBeNull();
   });
 });

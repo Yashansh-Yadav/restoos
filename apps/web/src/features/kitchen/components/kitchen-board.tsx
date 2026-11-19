@@ -246,23 +246,39 @@ export function KitchenBoardView({ initial }: { initial: KitchenBoard }) {
                           </div>
                           <ul className="flex flex-col gap-1.5">
                             {k.items
-                              .filter((i) => i.status !== "VOIDED" && i.status !== "SERVED")
-                              .map((i) => (
-                                <li key={i.id} className="text-lg leading-snug">
-                                  <span className="font-bold tabular-nums">{i.quantity} ×</span>{" "}
-                                  {i.name}
-                                  {i.addOns.length > 0 ? (
-                                    <span className="block text-base text-muted-foreground">
-                                      + {i.addOns.join(", ")}
+                              .filter((i) => i.status !== "SERVED")
+                              .map((i) =>
+                                i.status === "VOIDED" ? (
+                                  // M5-T5: a void stays on the ticket, struck, so the cook stops.
+                                  <li
+                                    key={i.id}
+                                    className="flex items-center gap-2 text-lg leading-snug text-muted-foreground"
+                                  >
+                                    <span className="line-through">
+                                      <span className="font-bold tabular-nums">{i.quantity} ×</span>{" "}
+                                      {i.name}
                                     </span>
-                                  ) : null}
-                                  {i.note ? (
-                                    <span className="mt-0.5 block rounded-sm bg-warning/15 px-2 py-0.5 text-base font-medium italic">
-                                      “{i.note}”
+                                    <span className="rounded-sm bg-destructive px-1.5 py-0.5 text-sm font-bold text-destructive-foreground">
+                                      VOID
                                     </span>
-                                  ) : null}
-                                </li>
-                              ))}
+                                  </li>
+                                ) : (
+                                  <li key={i.id} className="text-lg leading-snug">
+                                    <span className="font-bold tabular-nums">{i.quantity} ×</span>{" "}
+                                    {i.name}
+                                    {i.addOns.length > 0 ? (
+                                      <span className="block text-base text-muted-foreground">
+                                        + {i.addOns.join(", ")}
+                                      </span>
+                                    ) : null}
+                                    {i.note ? (
+                                      <span className="mt-0.5 block rounded-sm bg-warning/15 px-2 py-0.5 text-base font-medium italic">
+                                        “{i.note}”
+                                      </span>
+                                    ) : null}
+                                  </li>
+                                ),
+                              )}
                           </ul>
                           {next ? (
                             <Button

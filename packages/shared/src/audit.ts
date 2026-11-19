@@ -19,5 +19,7 @@ export const AUDIT_ACTIONS = [
   "outlet.settingsChanged",
   // Floor (M3-T2): old printed QR card stops working
   "table.rotateQr",
+  // Orders (M5-T5): an item taken off a table after it was sent
+  "order.voidItem",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

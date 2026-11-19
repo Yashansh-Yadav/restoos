@@ -8,6 +8,7 @@ import {
   unitPriceOf,
   type OrderPad,
   type PadItem,
+  type SentLine,
 } from "@restoos/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Loader2, Search, ShoppingBag } from "lucide-react";
@@ -24,6 +25,7 @@ import { sendOrder } from "../api";
 import { orderError, orderPadKey, useOrderPad } from "../hooks";
 import { CartSheet } from "./cart-sheet";
 import { OptionsSheet, type Draft } from "./options-sheet";
+import { VoidSheet } from "./void-sheet";
 
 // Staff order screen (M5-T1). Click budget: table tap → item taps → "Send to Kitchen".
 // A simple item adds one per tap; items with sizes or required add-ons open the options sheet;
@@ -41,7 +43,16 @@ const sameChoice = (a: Draft, b: Draft) =>
   (a.note ?? "") === (b.note ?? "");
 const newClientId = () => crypto.randomUUID().replaceAll("-", "");
 
-export function OrderScreen({ tableId, initial }: { tableId: string; initial: OrderPad }) {
+export function OrderScreen({
+  tableId,
+  initial,
+  canVoid = false,
+}: {
+  tableId: string;
+  initial: OrderPad;
+  /** Managers and owners may void sent items (M5-T5); the API checks again. */
+  canVoid?: boolean;
+}) {
   const client = useQueryClient();
   const { data: pad } = useOrderPad(tableId, initial);
   const { status: live } = useOutletSocket();
@@ -55,6 +66,7 @@ export function OrderScreen({ tableId, initial }: { tableId: string; initial: Or
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [tableBusy, setTableBusy] = useState(false);
+  const [voiding, setVoiding] = useState<SentLine | null>(null);
 
   const items = useMemo(() => pad.categories.flatMap((c) => c.items), [pad]);
   const itemById = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
@@ -94,11 +106,13 @@ export function OrderScreen({ tableId, initial }: { tableId: string; initial: Or
   );
   const tableTotals = orderTotals(
     [
-      ...pad.sent.map((l) => ({
-        unitPrice: l.unitPrice,
-        quantity: l.quantity,
-        taxRateBps: l.taxRateBps,
-      })),
+      ...pad.sent
+        .filter((l) => l.status !== "VOIDED")
+        .map((l) => ({
+          unitPrice: l.unitPrice,
+          quantity: l.quantity,
+          taxRateBps: l.taxRateBps,
+        })),
       ...cart.flatMap((l) => {
         const p = priced(l);
         return p ? [p] : [];
@@ -444,6 +458,33 @@ export function OrderScreen({ tableId, initial }: { tableId: string; initial: Or
             }}
             sending={sending}
             onSend={() => void send()}
+            {...(canVoid
+              ? {
+                  onVoid: (line: SentLine) => {
+                    setCartOpen(false);
+                    setVoiding(line);
+                  },
+                }
+              : {})}
+          />
+        ) : null}
+      </Sheet>
+
+      <Sheet open={voiding !== null} onOpenChange={(o) => !o && setVoiding(null)}>
+        {voiding ? (
+          <VoidSheet
+            key={voiding.id}
+            line={voiding}
+            onDone={(result) => {
+              const line = voiding;
+              setVoiding(null);
+              setNotice(
+                result.ok
+                  ? { kind: "ok", text: `Voided ${result.quantity} × ${line.name}` }
+                  : { kind: "error", text: result.message },
+              );
+              void client.invalidateQueries({ queryKey: orderPadKey(tableId) });
+            }}
           />
         ) : null}
       </Sheet>

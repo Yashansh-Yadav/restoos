@@ -74,6 +74,8 @@ export const sentLineSchema = z.object({
   note: z.string().nullable(),
   addOns: z.array(z.string()),
   status: orderItemStatusSchema,
+  /** Why it was voided (M5-T5); null unless status is VOIDED. */
+  voidReason: z.string().nullable(),
 });
 export type SentLine = z.infer<typeof sentLineSchema>;
 
@@ -91,7 +93,44 @@ export const orderPadSchema = z.object({
   addOnGroups: z.array(padAddOnGroupSchema),
   /** Most-ordered items lately (or the first on the menu), for the Popular tab. */
   topItemIds: z.array(z.string()),
-  /** Items already sent for the guests at this table now (open session), voids excluded. */
+  /** Items already sent for the guests at this table now (open session), voided ones included. */
   sent: z.array(sentLineSchema),
 });
 export type OrderPad = z.infer<typeof orderPadSchema>;
+
+// ── Void (M5-T5) ────────────────────────────────────────────────────────────
+
+/** One-tap reasons on the void sheet; anything else is typed under "Other". */
+export const VOID_REASONS = [
+  "Guest changed mind",
+  "Wrong item entered",
+  "Out of stock",
+  "Quality issue",
+] as const;
+
+export const voidItemInputSchema = z
+  .object({
+    /** How many of the line to void (a partial void splits the line). */
+    quantity: z.number().int().min(1, "At least 1").max(99),
+    /** The quantity the manager saw: if the line changed since, the void is refused. */
+    fromQuantity: z.number().int().min(1).max(99),
+    reason: z
+      .string()
+      .trim()
+      .min(1, "Give a reason")
+      .max(200, "Keep the reason under 200 characters"),
+  })
+  .refine((v) => v.quantity <= v.fromQuantity, {
+    message: "Can't void more than the line has",
+    path: ["quantity"],
+  });
+export type VoidItemInput = z.input<typeof voidItemInputSchema>;
+
+export const voidedItemSchema = z.object({
+  /** The VOIDED line (the original on a whole-line void, a new split line otherwise). */
+  id: z.string(),
+  quantity: z.number().int(),
+  /** What's left active on the original line (0 for a whole-line void). */
+  remaining: z.number().int(),
+});
+export type VoidedItem = z.infer<typeof voidedItemSchema>;

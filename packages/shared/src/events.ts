@@ -34,6 +34,14 @@ export type OutletEvents = {
     tableId: string | null;
     stage: KotStage | "SERVED";
   };
+  /** A manager voided a sent item (M5-T5); `itemId` is the voided OrderItem line. */
+  "order.itemVoided": {
+    outletId: string;
+    orderId: string;
+    tableId: string | null;
+    kotId: string | null;
+    itemId: string;
+  };
 };
 
 export type OutletEventName = keyof OutletEvents;
@@ -57,6 +65,7 @@ export const OUTLET_EVENT_NAMES = [
   "order.created",
   "kot.created",
   "kot.itemStatusChanged",
+  "order.itemVoided",
 ] as const satisfies readonly OutletEventName[];
 type MissingEventName = Exclude<OutletEventName, (typeof OUTLET_EVENT_NAMES)[number]>;
 // Compile-time check: adding an event to OutletEvents without listing it here fails the build.

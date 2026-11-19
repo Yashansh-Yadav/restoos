@@ -7,9 +7,12 @@ import {
   type OrderPad,
   type PadAddOnGroup,
   type PadItem,
+  type VoidedItem,
+  type voidItemInputSchema,
 } from "@restoos/shared";
 import type { z } from "zod";
 import { activeAssignment } from "../../lib/assignments";
+import { writeAudit } from "../../lib/audit";
 import { AppError, notFound } from "../../lib/errors";
 import { createKotForOrder, type CreatedKot } from "../../lib/kots";
 import type { EventBus } from "../../lib/events";
@@ -132,7 +135,7 @@ export async function getOrderPad({ db, ctx }: OrderDeps, tableId: string): Prom
 
   const sent = session
     ? await db.orderItem.findMany({
-        where: { order: { tableSessionId: session.id }, status: { not: "VOIDED" } },
+        where: { order: { tableSessionId: session.id } },
         orderBy: { createdAt: "asc" },
         select: {
           id: true,
@@ -143,6 +146,7 @@ export async function getOrderPad({ db, ctx }: OrderDeps, tableId: string): Prom
           note: true,
           addOns: true,
           status: true,
+          voidReason: true,
         },
       })
     : [];
@@ -162,6 +166,7 @@ export async function getOrderPad({ db, ctx }: OrderDeps, tableId: string): Prom
       note: l.note,
       addOns: addOnNames(l.addOns),
       status: l.status,
+      voidReason: l.status === "VOIDED" ? l.voidReason : null,
     })),
   };
 }
@@ -348,5 +353,107 @@ function replayOf(
     created: false,
     kot: existing.kots[0] ?? null,
     replay: true,
+  };
+}
+
+// ── Void (M5-T5) ────────────────────────────────────────────────────────────
+// A manager takes a sent item off a table, with a reason, audited in the same transaction. A
+// partial void splits the line: the original keeps the rest, a copy (same snapshots and KOT)
+// carries the voided quantity — so the bill and the leakage report both stay exact. The VOID
+// KOT slip prints from these rows once printing exists (M6).
+
+type VoidItemInput = z.output<typeof voidItemInputSchema>;
+
+export async function voidItem(
+  { db, ctx, events }: OrderDeps,
+  itemId: string,
+  input: VoidItemInput,
+): Promise<VoidedItem> {
+  const outlet = outletId(ctx);
+  const line = await db.orderItem.findFirst({
+    where: { id: itemId, order: { outletId: outlet } },
+    select: {
+      id: true,
+      orderId: true,
+      itemId: true,
+      variantId: true,
+      nameSnapshot: true,
+      unitPrice: true,
+      taxRateBps: true,
+      quantity: true,
+      note: true,
+      status: true,
+      kotId: true,
+      addOns: true,
+      order: { select: { tableSession: { select: { tableId: true } } } },
+    },
+  });
+  if (!line) throw notFound("Order item");
+  if (line.status === "VOIDED") {
+    throw new AppError(409, "ALREADY_VOIDED", `${line.nameSnapshot} is already void.`);
+  }
+  if (line.quantity !== input.fromQuantity) {
+    throw new AppError(409, "LINE_CHANGED", "This item changed — check the order and try again.");
+  }
+
+  const voidedById = ctx.actor.kind === "staff" ? ctx.actor.employeeId : null;
+  const stamp = { voidReason: input.reason, voidedById, voidedAt: new Date() };
+  const whole = input.quantity === line.quantity;
+
+  const voidedId = await db.$transaction(async (tx) => {
+    // Guarded on the quantity seen: a second manager (or a retry) can't void the same units twice.
+    const changed = await tx.orderItem.updateMany({
+      where: { id: line.id, quantity: line.quantity, status: { not: "VOIDED" } },
+      data: whole ? { status: "VOIDED", ...stamp } : { quantity: line.quantity - input.quantity },
+    });
+    if (changed.count !== 1) {
+      throw new AppError(409, "LINE_CHANGED", "This item changed — check the order and try again.");
+    }
+    let id = line.id;
+    if (!whole) {
+      const copy = await tx.orderItem.create({
+        data: {
+          organizationId: ctx.organizationId,
+          orderId: line.orderId,
+          itemId: line.itemId,
+          variantId: line.variantId,
+          nameSnapshot: line.nameSnapshot,
+          unitPrice: line.unitPrice,
+          taxRateBps: line.taxRateBps,
+          quantity: input.quantity,
+          note: line.note,
+          kotId: line.kotId,
+          addOns: line.addOns ?? [],
+          status: "VOIDED",
+          ...stamp,
+        },
+        select: { id: true },
+      });
+      id = copy.id;
+    }
+    await writeAudit(tx, ctx, "order.voidItem", "OrderItem", id, {
+      orderId: line.orderId,
+      kotId: line.kotId,
+      sourceItemId: line.id,
+      name: line.nameSnapshot,
+      quantity: input.quantity,
+      unitPrice: line.unitPrice,
+      statusBefore: line.status,
+      reason: input.reason,
+    });
+    return id;
+  });
+
+  await events.publishEvent(ctx, "order.itemVoided", {
+    outletId: outlet,
+    orderId: line.orderId,
+    tableId: line.order.tableSession?.tableId ?? null,
+    kotId: line.kotId,
+    itemId: voidedId,
+  });
+  return {
+    id: voidedId,
+    quantity: input.quantity,
+    remaining: line.quantity - input.quantity,
   };
 }
