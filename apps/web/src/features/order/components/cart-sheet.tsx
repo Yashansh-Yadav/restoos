@@ -9,6 +9,16 @@ import type { CartLine } from "./order-screen";
 // The table's order (M5-T1): new items with − / + steppers and Options, what's already been
 // sent, and the running total with GST (same maths as the bill).
 
+/** What a sent line is doing now (kitchen states arrive with M5-T3/T4). */
+const ITEM_STATUS: Record<SentLine["status"], string> = {
+  NEW: "Not sent",
+  SENT: "Sent",
+  PREPARING: "Preparing",
+  READY: "Ready",
+  SERVED: "Served",
+  VOIDED: "Void",
+};
+
 type Row = { line: CartLine; name: string; addOns: string[]; unitPrice: number };
 
 export function CartSheet({
@@ -110,8 +120,14 @@ export function CartSheet({
                       <span className="text-sm text-muted-foreground">
                         {" "}
                         + {l.addOns.join(", ")}
+                        <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                          {ITEM_STATUS[l.status]}
+                        </span>
                       </span>
                     ) : null}
+                    <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                      {ITEM_STATUS[l.status]}
+                    </span>
                   </span>
                   <span className="text-muted-foreground tabular-nums">
                     {formatINR(l.unitPrice * l.quantity)}

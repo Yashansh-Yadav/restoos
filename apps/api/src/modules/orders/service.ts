@@ -11,6 +11,7 @@ import {
 import type { z } from "zod";
 import { activeAssignment } from "../../lib/assignments";
 import { AppError, notFound } from "../../lib/errors";
+import { createKotForOrder, type CreatedKot } from "../../lib/kots";
 import type { EventBus } from "../../lib/events";
 import { applyTableTransition, publishTableStatus } from "../../lib/tables";
 import type { TenantContext, TenantDb } from "../../lib/tenant";
@@ -18,7 +19,8 @@ import type { TenantContext, TenantDb } from "../../lib/tenant";
 // Staff ordering (M5-T1). The order pad gives the butler everything for one table; a send is
 // re-priced here from the database (the client's prices are never trusted), snapshotted onto
 // OrderItems, and saved in one transaction with the table's state change (first send seats a
-// free table). Idempotent on clientId (rule 8). Each send is one Order; M5-T2 turns it into a KOT.
+// free table). Idempotent on clientId (rule 8). Each send is one Order and one KOT (M5-T2), all
+// committed together.
 
 export type OrderDeps = { db: TenantDb; ctx: TenantContext; events: EventBus };
 type CreateOrderInput = z.output<typeof createOrderSchema>;
@@ -186,11 +188,7 @@ export async function createOrder(
   // Rule 8: the same send again (a retry, an offline resync) changes nothing.
   const existing = await db.order.findUnique({
     where: { clientId: input.clientId },
-    select: {
-      id: true,
-      tableSession: { select: { tableId: true } },
-      _count: { select: { items: true } },
-    },
+    select: replaySelect,
   });
   if (existing) return replayOf(existing, input.tableId);
 
@@ -262,7 +260,11 @@ export async function createOrder(
     };
   });
 
-  let saved: { order: { id: string }; table: Awaited<ReturnType<typeof applyTableTransition>> };
+  let saved: {
+    order: { id: string };
+    table: Awaited<ReturnType<typeof applyTableTransition>>;
+    kot: CreatedKot | null;
+  };
   try {
     saved = await db.$transaction(async (tx) => {
       // First send seats a free table (FREE → ORDERED opens the session); later ones keep it.
@@ -280,18 +282,16 @@ export async function createOrder(
         },
         select: { id: true },
       });
-      return { order, table };
+      // The kitchen ticket for exactly these items, numbered for today (M5-T2).
+      const kot = await createKotForOrder(tx, ctx, order.id);
+      return { order, table, kot };
     });
   } catch (err) {
     // Two copies of the same send raced: the other one won; answer like a replay.
     if (!isUniqueViolation(err)) throw err;
     const winner = await db.order.findUnique({
       where: { clientId: input.clientId },
-      select: {
-        id: true,
-        tableSession: { select: { tableId: true } },
-        _count: { select: { items: true } },
-      },
+      select: replaySelect,
     });
     if (!winner) throw err;
     return replayOf(winner, input.tableId);
@@ -303,17 +303,39 @@ export async function createOrder(
     orderId: saved.order.id,
     tableId: input.tableId,
   });
+  if (saved.kot) {
+    await events.publishEvent(ctx, "kot.created", {
+      outletId: outlet,
+      kotId: saved.kot.id,
+      number: saved.kot.number,
+      orderId: saved.order.id,
+      tableId: input.tableId,
+    });
+  }
   return {
     id: saved.order.id,
     tableId: input.tableId,
     itemCount: lines.length,
     created: true,
+    kot: saved.kot ? { id: saved.kot.id, number: saved.kot.number } : null,
     replay: false,
   };
 }
 
+const replaySelect = {
+  id: true,
+  tableSession: { select: { tableId: true } },
+  _count: { select: { items: true } },
+  kots: { select: { id: true, number: true }, orderBy: { createdAt: "asc" }, take: 1 },
+} as const;
+
 function replayOf(
-  existing: { id: string; tableSession: { tableId: string } | null; _count: { items: number } },
+  existing: {
+    id: string;
+    tableSession: { tableId: string } | null;
+    _count: { items: number };
+    kots: { id: string; number: number }[];
+  },
   tableId: string,
 ): CreatedOrder & { replay: boolean } {
   if (existing.tableSession && existing.tableSession.tableId !== tableId) {
@@ -324,6 +346,7 @@ function replayOf(
     tableId,
     itemCount: existing._count.items,
     created: false,
+    kot: existing.kots[0] ?? null,
     replay: true,
   };
 }

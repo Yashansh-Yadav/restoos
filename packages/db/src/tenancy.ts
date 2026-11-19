@@ -46,6 +46,7 @@ export const MODEL_SCOPE = {
   Order: "outlet",
   OrderItem: "organization",
   Kot: "outlet",
+  KotCounter: "outlet",
   InvoiceBlock: "outlet",
   Bill: "outlet",
   Payment: "organization",

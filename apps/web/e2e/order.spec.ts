@@ -70,7 +70,7 @@ test("butler takes an order in 5 taps", async ({ page, request, browser }) => {
 
   // 1 tap: Send.
   await tablet.getByRole("button", { name: "Send to Kitchen" }).last().click();
-  await expect(tablet.getByText("Sent to kitchen")).toBeVisible({ timeout: 15_000 });
+  await expect(tablet.getByText("Sent to kitchen — KOT #1")).toBeVisible({ timeout: 15_000 });
   expect(await tablet.evaluate(() => Number(sessionStorage.getItem("taps")))).toBe(5);
 
   // The table is now Ordered, and the sent items are listed.
@@ -82,6 +82,7 @@ test("butler takes an order in 5 taps", async ({ page, request, browser }) => {
   await expect(order.getByRole("heading", { name: "Already sent" })).toBeVisible();
   await expect(order.getByText("Butter Chicken")).toBeVisible();
   await expect(order.getByText("Packaged Water (1 L)")).toBeVisible();
+  await expect(order.getByText("Sent", { exact: true }).first()).toBeVisible();
   await tablet.keyboard.press("Escape");
 
   // A dish with sizes opens its options; a stepper changes the count.
@@ -95,6 +96,9 @@ test("butler takes an order in 5 taps", async ({ page, request, browser }) => {
   await expect(order.getByRole("button", { name: "Send to Kitchen" })).toBeEnabled();
   await tablet.keyboard.press("Escape");
   await expect(tablet.getByText(/2 new · ₹462/)).toBeVisible();
+  // The next send is the day's second kitchen ticket.
+  await tablet.getByRole("button", { name: "Send to Kitchen" }).last().click();
+  await expect(tablet.getByText("Sent to kitchen — KOT #2")).toBeVisible({ timeout: 15_000 });
 
   // Back on the floor, T1 reads Ordered.
   await tablet.goto("/staff/floor");

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { startOfDay } from "./shifts";
+import { businessDateOf, startOfDay } from "./shifts";
 
 describe("startOfDay", () => {
   it("returns local midnight in India as a UTC instant", () => {
@@ -24,5 +24,17 @@ describe("startOfDay", () => {
     expect(startOfDay(new Date("2026-11-17T12:00:00Z"), "UTC").toISOString()).toBe(
       "2026-11-17T00:00:00.000Z",
     );
+  });
+});
+
+describe("businessDateOf (M5-T2)", () => {
+  it("uses the outlet's local date: IST midnight, not UTC", () => {
+    // 18:29 UTC = 23:59 IST on the 18th; 18:31 UTC = 00:01 IST on the 19th.
+    expect(businessDateOf(new Date("2026-11-18T18:29:00Z"), "Asia/Kolkata")).toBe("2026-11-18");
+    expect(businessDateOf(new Date("2026-11-18T18:31:00Z"), "Asia/Kolkata")).toBe("2026-11-19");
+  });
+
+  it("works for other zones", () => {
+    expect(businessDateOf(new Date("2026-11-19T03:00:00Z"), "America/New_York")).toBe("2026-11-18");
   });
 });

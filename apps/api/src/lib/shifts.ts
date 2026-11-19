@@ -6,6 +6,20 @@ import type { PrismaClient } from "@restoos/db";
 
 export const MAX_SHIFT_HOURS = 14;
 
+/**
+ * The outlet's business day for `date`: its local calendar date, "2026-11-19" (M5-T2: daily KOT
+ * numbers restart at local midnight). A later-night cut-off would be an outlet setting.
+ */
+export function businessDateOf(date: Date, timeZone: string): string {
+  // en-CA formats as YYYY-MM-DD.
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
 /** UTC instant of local midnight for `date` in `timeZone` (e.g. Asia/Kolkata). */
 export function startOfDay(date: Date, timeZone: string): Date {
   const parts = (d: Date) => {

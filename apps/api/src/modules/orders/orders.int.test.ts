@@ -117,8 +117,8 @@ describe("staff ordering (M5-T1)", () => {
       orderBy: { nameSnapshot: "asc" },
     });
     expect(rows.map((i) => [i.nameSnapshot, i.unitPrice, i.quantity, i.status, i.note])).toEqual([
-      ["Dal Makhani", 25_000, 2, "NEW", null],
-      ["Paneer Tikka (Full)", 27_000, 1, "NEW", "less spicy"],
+      ["Dal Makhani", 25_000, 2, "SENT", null],
+      ["Paneer Tikka (Full)", 27_000, 1, "SENT", "less spicy"],
     ]);
     expect(rows[1]?.addOns).toEqual([{ addOnId: cheese, name: "Cheese", price: 3_000 }]);
 
@@ -133,7 +133,11 @@ describe("staff ordering (M5-T1)", () => {
     expect(saved.tableSession?.tableId).toBe(t1.id);
     expect(saved.tableSession?.closedAt).toBeNull();
 
-    expect(events.map((e) => e.name)).toEqual(["table.statusChanged", "order.created"]);
+    expect(events.map((e) => e.name)).toEqual([
+      "table.statusChanged",
+      "order.created",
+      "kot.created",
+    ]);
     expect(events[1]?.payload).toEqual({ outletId: r.outletId, orderId: order.id, tableId: t1.id });
 
     // A second send keeps the same guests' session; the pad shows everything sent.

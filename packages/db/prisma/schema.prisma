@@ -159,6 +159,7 @@ model Outlet {
   menuImports      MenuImport[]
   orders           Order[]
   kots             Kot[]
+  kotCounters      KotCounter[]
   invoiceBlocks    InvoiceBlock[]
   bills            Bill[]
   feedback         Feedback[]
@@ -561,7 +562,8 @@ model Kot {
   organizationId String
   outletId       String
   orderId        String
-  number         Int // daily running number per outlet
+  number         Int // daily running number per outlet (KotCounter)
+  businessDate   String // outlet-local date the number belongs to, "2026-11-19"
   station        String    @default("KITCHEN") // future: BAR, etc.
   printedAt      DateTime?
   createdAt      DateTime  @default(now())
@@ -571,8 +573,25 @@ model Kot {
   order  Order       @relation(fields: [orderId], references: [id], onDelete: Restrict)
   items  OrderItem[]
 
+  @@unique([outletId, businessDate, number])
   @@index([outletId, createdAt])
   @@index([orderId])
+  @@index([organizationId])
+}
+
+/// Daily KOT numbers (M5-T2): one row per outlet per business day; `last` is bumped atomically
+/// (upsert-increment), so two sends at the same instant never share a number.
+model KotCounter {
+  organizationId String
+  outletId       String
+  businessDate   String // outlet-local date, "2026-11-19"
+  last           Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Restrict)
+
+  @@id([outletId, businessDate])
   @@index([organizationId])
 }
 

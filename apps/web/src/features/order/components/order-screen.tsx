@@ -142,7 +142,7 @@ export function OrderScreen({ tableId, initial }: { tableId: string; initial: Or
     setSending(true);
     setNotice(null);
     try {
-      await sendOrder({
+      const sent = await sendOrder({
         clientId: clientIdRef.current,
         tableId,
         items: cart.map((l) => ({
@@ -156,7 +156,10 @@ export function OrderScreen({ tableId, initial }: { tableId: string; initial: Or
       setCart([]);
       clientIdRef.current = newClientId();
       setCartOpen(false);
-      setNotice({ kind: "ok", text: "Sent to kitchen" });
+      setNotice({
+        kind: "ok",
+        text: sent.kot ? `Sent to kitchen — KOT #${sent.kot.number}` : "Sent to kitchen",
+      });
     } catch (err) {
       setNotice({ kind: "error", text: orderError(err) });
     } finally {

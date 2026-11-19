@@ -35,6 +35,8 @@ export const createdOrderSchema = z.object({
   itemCount: z.number().int(),
   /** False when this clientId had already been sent (nothing new was created). */
   created: z.boolean(),
+  /** The kitchen ticket for this send (M5-T2): the day's KOT number. */
+  kot: z.object({ id: z.string(), number: z.number().int() }).nullable(),
 });
 export type CreatedOrder = z.infer<typeof createdOrderSchema>;
 
