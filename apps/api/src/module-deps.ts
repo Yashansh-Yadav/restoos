@@ -49,6 +49,7 @@ export function buildModuleDeps({
   events,
   appUrl = "http://localhost:3000",
   realtime = { disconnect: () => undefined },
+  pairAttemptsPerMinute,
   log,
 }: {
   auth: Auth;
@@ -59,10 +60,16 @@ export function buildModuleDeps({
   events?: EventBus;
   appUrl?: string;
   realtime?: Realtime;
+  pairAttemptsPerMinute?: number;
   log?: (event: string, data: Record<string, unknown>) => void;
 }): ModuleDeps {
   const entitlements = createEntitlements(prisma);
-  const staffAuth = createStaffAuth({ prisma, redis, log });
+  const staffAuth = createStaffAuth({
+    prisma,
+    redis,
+    log,
+    ...(pairAttemptsPerMinute ? { pairAttemptsPerMinute } : {}),
+  });
   return {
     getTenantDb: createTenantDbFactory(prisma),
     entitlements,

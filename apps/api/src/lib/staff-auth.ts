@@ -28,7 +28,7 @@ export const DEVICE_COOKIE = "restoos_device";
 export const STAFF_COOKIE = "restoos_staff";
 export const DEVICE_COOKIE_MAX_AGE_S = 365 * 24 * 3600;
 export const STAFF_SESSION_HOURS = 14;
-const PAIR_ATTEMPTS_PER_MINUTE = 10;
+const DEFAULT_PAIR_ATTEMPTS_PER_MINUTE = 10;
 /** Stored when a device is unpaired: never equals a SHA-256 hex digest. */
 const UNPAIRED = "unpaired";
 
@@ -69,10 +69,13 @@ export type StaffAuth = ReturnType<typeof createStaffAuth>;
 export function createStaffAuth({
   prisma,
   redis,
+  pairAttemptsPerMinute = DEFAULT_PAIR_ATTEMPTS_PER_MINUTE,
   log = () => undefined,
 }: {
   prisma: PrismaClient;
   redis: Redis;
+  /** Guessing guard for pairing codes (env PAIR_ATTEMPTS_PER_IP_PER_MINUTE; E2E raises it). */
+  pairAttemptsPerMinute?: number;
   /** Security events (lockouts) for the app log; they're also written to the audit log. */
   log?: (event: string, data: Record<string, unknown>) => void;
 }) {
@@ -172,12 +175,12 @@ export function createStaffAuth({
       }
     },
 
-    /** Guessing guard for the public pairing endpoint: 10 tries per minute per IP. */
+    /** Guessing guard for the public pairing endpoint: 10 tries per minute per IP by default. */
     async assertPairingAllowed(ip: string): Promise<void> {
       const key = `pair:ip:${ip}`;
       const n = await redis.incr(key);
       if (n === 1) await redis.expire(key, 60);
-      if (n > PAIR_ATTEMPTS_PER_MINUTE) {
+      if (n > pairAttemptsPerMinute) {
         throw new AppError(
           429,
           "TOO_MANY_ATTEMPTS",

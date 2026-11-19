@@ -52,6 +52,7 @@ export async function start(env: ApiEnv): Promise<void> {
       auth,
       appUrl: env.APP_URL,
       googleEnabled: Boolean(env.GOOGLE_CLIENT_ID),
+      pairAttemptsPerMinute: env.PAIR_ATTEMPTS_PER_IP_PER_MINUTE,
       ...(otp instanceof ConsoleOtpProvider ? { devOtp: otp } : {}),
     },
   });

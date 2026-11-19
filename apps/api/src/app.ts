@@ -49,6 +49,8 @@ export type AppDeps = {
   /** Public web origin (APP_URL) — Better Auth runs on it via the same-origin /api proxy. */
   appUrl: string;
   googleEnabled: boolean;
+  /** Device pairing attempts per IP per minute (default 10). */
+  pairAttemptsPerMinute?: number;
   /** Set only in development/test with the console OTP provider: enables GET /api/dev/last-otp. */
   devOtp?: ConsoleOtpProvider;
 };

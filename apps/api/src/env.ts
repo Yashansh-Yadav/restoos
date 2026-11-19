@@ -31,6 +31,8 @@ const apiEnvObject = z.object({
   OTP_API_KEY: optional(z.string()),
   /** Per-IP OTP sends per minute (CGNAT-friendly; per-phone throttles still apply). E2E raises it. */
   OTP_SENDS_PER_IP_PER_MINUTE: z.coerce.number().int().min(1).max(1000).default(10),
+  /** Per-IP device pairing attempts per minute (guessing guard). E2E raises it. */
+  PAIR_ATTEMPTS_PER_IP_PER_MINUTE: z.coerce.number().int().min(1).max(1000).default(10),
 
   // Web Push (M8-T1)
   VAPID_PUBLIC_KEY: optional(z.string()),
