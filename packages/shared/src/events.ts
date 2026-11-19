@@ -42,6 +42,15 @@ export type OutletEvents = {
     kotId: string | null;
     itemId: string;
   };
+  /** A guest placed an order from the QR menu that staff must approve (M5-T6b). */
+  "order.pendingApproval": { outletId: string; orderId: string; tableId: string };
+  /** A guest order was approved (OPEN, sent to the kitchen) or turned down (CANCELLED). */
+  "order.statusChanged": {
+    outletId: string;
+    orderId: string;
+    tableId: string | null;
+    status: "OPEN" | "CANCELLED";
+  };
 };
 
 export type OutletEventName = keyof OutletEvents;
@@ -66,6 +75,8 @@ export const OUTLET_EVENT_NAMES = [
   "kot.created",
   "kot.itemStatusChanged",
   "order.itemVoided",
+  "order.pendingApproval",
+  "order.statusChanged",
 ] as const satisfies readonly OutletEventName[];
 type MissingEventName = Exclude<OutletEventName, (typeof OUTLET_EVENT_NAMES)[number]>;
 // Compile-time check: adding an event to OutletEvents without listing it here fails the build.

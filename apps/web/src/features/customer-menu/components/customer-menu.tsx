@@ -1,7 +1,7 @@
 "use client";
 
 import { formatINR, type PublicMenu } from "@restoos/shared";
-import { Search, X } from "lucide-react";
+import { CheckCircle2, Minus, Plus, Search, X } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -9,13 +9,17 @@ import { DietMarker } from "@/features/menu/components/diet-marker";
 import { useTableSocket } from "@/features/realtime/use-outlet-socket";
 import { cn } from "@/lib/utils";
 import { displayName, filterMenu, type MenuItem } from "../filter";
-import { usePublicMenu } from "../hooks";
+import { usePublicMenu, useTableOrders } from "../hooks";
+import { useGuestOrdering, type GuestOrdering } from "./guest-ordering";
 import { LanguageToggle } from "./language-toggle";
+import { YourOrders } from "./your-orders";
 
 // Customer menu (M5-T6a, DESIGN.md "Customer menu"): sticky header with outlet, table, language
 // and Veg Only; pill search; a category strip that follows the scroll; dish cards with diet
 // marker, price and optional photo. Out-of-stock dishes stay listed, greyed, with a label.
 // Live via the table socket: stock and menu changes show up without a reload.
+// M5-T6b: when the outlet allows guest ordering — Add / steppers, the order bar, Place Order,
+// and "Your Orders" with live status.
 
 const EAGER_IMAGES = 4;
 
@@ -24,6 +28,8 @@ export function CustomerMenu({ qrToken, initial }: { qrToken: string; initial: P
   const locale = useLocale();
   const { data } = usePublicMenu(qrToken, initial);
   useTableSocket(qrToken);
+  const ordering = useGuestOrdering(qrToken, data);
+  const { data: tableOrders } = useTableOrders(qrToken, ordering.enabled);
 
   const [vegOnly, setVegOnly] = useState(false);
   const [query, setQuery] = useState("");
@@ -177,7 +183,19 @@ export function CustomerMenu({ qrToken, initial }: { qrToken: string; initial: P
         )}
       </header>
 
-      <main className="flex flex-1 flex-col gap-6 px-4 pt-4 pb-10">
+      <main
+        className={cn("flex flex-1 flex-col gap-6 px-4 pt-4", ordering.hasBar ? "pb-28" : "pb-10")}
+      >
+        {ordering.notice ? (
+          <p
+            role="status"
+            className="flex items-center gap-2 rounded-lg bg-success/10 px-4 py-3 text-base font-medium"
+          >
+            <CheckCircle2 className="size-5 shrink-0 text-success" aria-hidden="true" />
+            {ordering.notice}
+          </p>
+        ) : null}
+        {tableOrders ? <YourOrders orders={tableOrders.orders} /> : null}
         {!hasAnyItem ? (
           <p className="rounded-lg border border-dashed border-border px-4 py-10 text-center text-base text-muted-foreground">
             {t("empty")}
@@ -227,6 +245,7 @@ export function CustomerMenu({ qrToken, initial }: { qrToken: string; initial: P
                     item={item}
                     locale={locale}
                     eager={ci === 0 && ii < EAGER_IMAGES}
+                    ordering={ordering}
                   />
                 ))}
               </ul>
@@ -238,11 +257,22 @@ export function CustomerMenu({ qrToken, initial }: { qrToken: string; initial: P
           {data.outlet.pricesIncludeTax ? t("pricesInclude") : t("pricesExclude")}
         </p>
       </main>
+      {ordering.layer}
     </div>
   );
 }
 
-function Dish({ item, locale, eager }: { item: MenuItem; locale: string; eager: boolean }) {
+function Dish({
+  item,
+  locale,
+  eager,
+  ordering,
+}: {
+  item: MenuItem;
+  locale: string;
+  eager: boolean;
+  ordering: GuestOrdering;
+}) {
   const t = useTranslations("customer.menu");
   const name = displayName(item, locale);
   const showEnglish = name !== item.name;
@@ -277,20 +307,81 @@ function Dish({ item, locale, eager }: { item: MenuItem; locale: string; eager: 
           ) : null}
         </div>
       </div>
-      {item.imageUrl ? (
-        <Image
-          src={item.imageUrl}
-          alt=""
-          width={88}
-          height={88}
-          unoptimized
-          loading={eager ? "eager" : "lazy"}
-          className={cn(
-            "size-22 shrink-0 rounded-md bg-muted object-cover",
-            !item.inStock && "opacity-50 grayscale",
-          )}
-        />
-      ) : null}
+      <div className="flex shrink-0 flex-col items-center gap-2">
+        {item.imageUrl ? (
+          <Image
+            src={item.imageUrl}
+            alt=""
+            width={88}
+            height={88}
+            unoptimized
+            loading={eager ? "eager" : "lazy"}
+            className={cn(
+              "size-22 shrink-0 rounded-md bg-muted object-cover",
+              !item.inStock && "opacity-50 grayscale",
+            )}
+          />
+        ) : null}
+        {ordering.enabled && item.inStock ? (
+          <AddControl item={item} name={name} ordering={ordering} />
+        ) : null}
+      </div>
     </li>
+  );
+}
+
+/** "Add" pill → − n + for a plain dish; dishes with sizes/add-ons always open their choices. */
+function AddControl({
+  item,
+  name,
+  ordering,
+}: {
+  item: MenuItem;
+  name: string;
+  ordering: GuestOrdering;
+}) {
+  const t = useTranslations("customer.order");
+  const plain = !ordering.hasChoices(item);
+  const n = plain ? ordering.plainCount(item) : ordering.countOf(item.id);
+  if (plain && n > 0) {
+    return (
+      <div
+        role="group"
+        aria-label={name}
+        className="flex h-11 items-center rounded-full border border-foreground"
+      >
+        <button
+          type="button"
+          aria-label={t("oneLess", { name })}
+          onClick={() => ordering.step(item, -1)}
+          className="inline-flex size-11 items-center justify-center rounded-full"
+        >
+          <Minus className="size-4" aria-hidden="true" />
+        </button>
+        <span className="w-6 text-center text-base font-bold tabular-nums" aria-live="polite">
+          {n}
+        </span>
+        <button
+          type="button"
+          aria-label={t("oneMore", { name })}
+          onClick={() => ordering.step(item, 1)}
+          className="inline-flex size-11 items-center justify-center rounded-full"
+        >
+          <Plus className="size-4" aria-hidden="true" />
+        </button>
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      aria-label={t("addName", { name })}
+      onClick={() => ordering.tapAdd(item)}
+      className="inline-flex h-11 min-w-22 items-center justify-center gap-1 rounded-full border border-foreground px-4 text-sm font-semibold hover:bg-muted"
+    >
+      <Plus className="size-4" aria-hidden="true" />
+      {t("add")}
+      {n > 0 ? <span className="tabular-nums">({n})</span> : null}
+    </button>
   );
 }

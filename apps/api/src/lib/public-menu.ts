@@ -18,7 +18,7 @@ const keys = {
   payload: (outletId: string, version: string) => `pubmenu:${outletId}:${version}`,
 };
 
-export type PublicTable = { organizationId: string; outletId: string; label: string };
+export type PublicTable = { id: string; organizationId: string; outletId: string; label: string };
 
 // ── Pure builder (unit-tested) ──────────────────────────────────────────────
 
@@ -150,7 +150,7 @@ export function createPublicMenu({
     if (!QR_TOKEN_FORMAT.test(qrToken)) return null;
     return prisma.diningTable.findUnique({
       where: { qrToken },
-      select: { organizationId: true, outletId: true, label: true },
+      select: { id: true, organizationId: true, outletId: true, label: true },
     });
   }
 

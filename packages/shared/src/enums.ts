@@ -58,6 +58,7 @@ export const subscriptionStatusSchema = z.enum([
 ]);
 export const licenceStatusSchema = z.enum(["ACTIVE", "AMC_DUE", "GRACE", "CORE_MODE"]);
 
+export type OrderingMode = z.infer<typeof orderingModeSchema>;
 export type StaffRole = z.infer<typeof staffRoleSchema>;
 export type TableStatus = z.infer<typeof tableStatusSchema>;
 export type DietType = z.infer<typeof dietTypeSchema>;

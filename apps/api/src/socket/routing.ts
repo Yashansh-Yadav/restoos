@@ -16,11 +16,14 @@ export const EVENT_ROUTES: { readonly [K in OutletEventName]: readonly Audience[
   "assignment.changed": ["staff", "owner"],
   "table.statusChanged": ["staff", "owner"],
   // §8: staff + kitchen (the kitchen display arrives in M5-T3).
-  "order.created": ["staff", "kitchen"],
+  "order.created": ["staff", "kitchen", "customers"],
   "kot.created": ["kitchen", "staff"],
   "kot.itemStatusChanged": ["kitchen", "staff"],
   // M5-T5: the kitchen stops cooking it; owners see voids (leakage).
   "order.itemVoided": ["kitchen", "staff", "owner"],
+  // M5-T6b: guest orders. Customers get ids only and refetch their own table's list.
+  "order.pendingApproval": ["staff", "owner", "customers"],
+  "order.statusChanged": ["staff", "owner", "customers", "kitchen"],
 };
 
 const roomOf: Record<Audience, (outletId: string) => string> = {

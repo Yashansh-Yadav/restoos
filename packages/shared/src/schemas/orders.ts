@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { dietTypeSchema, orderItemStatusSchema, tableStatusSchema } from "../enums";
+import {
+  dietTypeSchema,
+  orderingModeSchema,
+  orderItemStatusSchema,
+  tableStatusSchema,
+} from "../enums";
 
 // Staff ordering (M5-T1): the order pad for one table, and a "Send to kitchen" request.
 
@@ -79,6 +84,24 @@ export const sentLineSchema = z.object({
 });
 export type SentLine = z.infer<typeof sentLineSchema>;
 
+/** A guest order on the staff order screen, waiting for Approve & Send. */
+export const pendingOrderSchema = z.object({
+  id: z.string(),
+  createdAt: z.iso.datetime(),
+  lines: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      quantity: z.number().int(),
+      unitPrice: z.number().int(),
+      taxRateBps: z.number().int(),
+      note: z.string().nullable(),
+      addOns: z.array(z.string()),
+    }),
+  ),
+});
+export type PendingOrder = z.infer<typeof pendingOrderSchema>;
+
 export const orderPadSchema = z.object({
   table: z.object({
     id: z.string(),
@@ -95,6 +118,8 @@ export const orderPadSchema = z.object({
   topItemIds: z.array(z.string()),
   /** Items already sent for the guests at this table now (open session), voided ones included. */
   sent: z.array(sentLineSchema),
+  /** Guest orders from the QR menu waiting for staff (M5-T6b), oldest first. */
+  pending: z.array(pendingOrderSchema),
 });
 export type OrderPad = z.infer<typeof orderPadSchema>;
 
@@ -134,3 +159,62 @@ export const voidedItemSchema = z.object({
   remaining: z.number().int(),
 });
 export type VoidedItem = z.infer<typeof voidedItemSchema>;
+
+// ── Guest ordering (M5-T6b) ─────────────────────────────────────────────────
+
+/** POST /api/public/table/:qrToken/order — same lines as a staff send, fewer per order. */
+export const guestOrderInputSchema = z.object({
+  clientId: clientIdSchema,
+  items: z.array(orderLineInputSchema).min(1, "Add at least one item").max(30),
+});
+export type GuestOrderInput = z.input<typeof guestOrderInputSchema>;
+
+export const guestOrderResultSchema = z.object({
+  id: z.string(),
+  /** PENDING_APPROVAL (staff will confirm) or OPEN (sent straight to the kitchen). */
+  status: z.enum(["PENDING_APPROVAL", "OPEN"]),
+  /** False when this clientId was already placed (a retry). */
+  created: z.boolean(),
+});
+export type GuestOrderResult = z.infer<typeof guestOrderResultSchema>;
+
+/** What a guest sees about their table's orders this sitting (no prices, no staff names). */
+export const guestOrderStateSchema = z.enum(["WAITING", "SENT", "NOT_ACCEPTED"]);
+export type GuestOrderState = z.infer<typeof guestOrderStateSchema>;
+
+export const tableOrdersSchema = z.object({
+  orderingMode: orderingModeSchema,
+  orders: z.array(
+    z.object({
+      id: z.string(),
+      createdAt: z.iso.datetime(),
+      state: guestOrderStateSchema,
+      /** Why staff didn't accept it (NOT_ACCEPTED only). */
+      reason: z.string().nullable(),
+      items: z.array(
+        z.object({ name: z.string(), quantity: z.number().int(), addOns: z.array(z.string()) }),
+      ),
+    }),
+  ),
+});
+export type TableOrders = z.infer<typeof tableOrdersSchema>;
+
+/** One-tap reasons when staff turn a guest order down; free text otherwise. */
+export const REJECT_REASONS = ["Item not available", "Please order with the staff"] as const;
+
+export const rejectOrderSchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .max(120, "Keep the reason under 120 characters")
+    .optional()
+    .transform((v) => (v ? v : undefined)),
+});
+export type RejectOrderInput = z.input<typeof rejectOrderSchema>;
+
+export const orderDecisionSchema = z.object({
+  id: z.string(),
+  status: z.enum(["OPEN", "CANCELLED"]),
+  kot: z.object({ id: z.string(), number: z.number().int() }).nullable(),
+});
+export type OrderDecision = z.infer<typeof orderDecisionSchema>;

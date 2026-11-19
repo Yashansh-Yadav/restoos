@@ -5,6 +5,7 @@ import type { TenantContext } from "./tenant";
 // packages/shared/src/events.ts. Listeners today: the customer-menu cache (M2-T5); M4 attaches
 // Socket.io. Awaiting means the response goes out only after caches are busted, so a reader
 // right after a change never sees the old menu.
+// Listeners run in subscription order (see publishEvent).
 // Listeners must never break the write that triggered them: their errors are reported, never
 // thrown, and the returned promise always resolves.
 
@@ -27,14 +28,16 @@ export function createEventBus(
   return {
     async publishEvent(ctx, name, payload) {
       const event = { name, payload } as OutletEvent;
-      const runs = [...listeners].map(async (listener) => {
+      // One after another, in subscription order: the menu-cache bust (subscribed first in
+      // app.ts) must finish before the Socket.io emit, or a phone refetching on the event can
+      // read the old cached menu and stay stale (seen in the M5-T6 live-stock E2E).
+      for (const listener of [...listeners]) {
         try {
           await listener(ctx, event);
         } catch (err) {
           onListenerError(err);
         }
-      });
-      await Promise.all(runs);
+      }
     },
     subscribe(listener) {
       listeners.add(listener);

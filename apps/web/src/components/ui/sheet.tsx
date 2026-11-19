@@ -18,8 +18,14 @@ export function SheetContent({
   description,
   children,
   className,
+  closeLabel = "Close",
   ...props
-}: ComponentProps<typeof DialogPrimitive.Content> & { title: ReactNode; description?: ReactNode }) {
+}: ComponentProps<typeof DialogPrimitive.Content> & {
+  title: ReactNode;
+  description?: ReactNode;
+  /** Translated "Close" on customer screens. */
+  closeLabel?: string;
+}) {
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-black/50 data-[state=open]:animate-in data-[state=open]:fade-in-0 motion-reduce:animate-none" />
@@ -46,7 +52,7 @@ export function SheetContent({
           </div>
           <DialogPrimitive.Close
             className="-mt-2 -mr-2 inline-flex size-touch shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            aria-label="Close"
+            aria-label={closeLabel}
           >
             <X className="size-5" aria-hidden="true" />
           </DialogPrimitive.Close>

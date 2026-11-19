@@ -2,7 +2,9 @@ import {
   apiErrorSchema,
   createdOrderSchema,
   createOrderSchema,
+  orderDecisionSchema,
   orderPadSchema,
+  rejectOrderSchema,
   voidedItemSchema,
   voidItemInputSchema,
 } from "@restoos/shared";
@@ -79,5 +81,34 @@ export const orderRoutes =
         },
       },
       (request) => orders.voidItem(deps(request), request.params.id, request.body),
+    );
+
+    app.post(
+      "/staff/orders/:id/approve",
+      {
+        preHandler,
+        schema: {
+          tags,
+          summary: "Approve a guest order from the QR menu and send it to the kitchen",
+          params: z.object({ id: z.string().min(1) }),
+          response: { 200: orderDecisionSchema, ...errors },
+        },
+      },
+      (request) => orders.approveOrder(deps(request), request.params.id),
+    );
+
+    app.post(
+      "/staff/orders/:id/reject",
+      {
+        preHandler,
+        schema: {
+          tags,
+          summary: "Turn down a guest order (the guest sees the reason)",
+          params: z.object({ id: z.string().min(1) }),
+          body: rejectOrderSchema,
+          response: { 200: orderDecisionSchema, ...errors },
+        },
+      },
+      (request) => orders.rejectOrder(deps(request), request.params.id, request.body.reason),
     );
   };

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import {
   addStaffMember,
   addTables,
@@ -6,24 +6,12 @@ import {
   randomMobile,
   signedInTablet,
   signInWithPhone,
+  tableToken,
 } from "./helpers";
 
 // M5-T6a acceptance: a guest scans T1's QR and gets the live menu — Veg Only, search, the Hindi
 // toggle (remembered), and a kitchen stock change showing up within 2 s with no reload (the
 // customer half of M4-T3's acceptance). An unknown QR code gets a friendly screen.
-
-async function tableToken(page: Page, label: string): Promise<string> {
-  const me = (await (await page.request.get("/api/me")).json()) as {
-    owner: { outlets: { id: string }[] };
-  };
-  const outletId = me.owner.outlets[0]?.id ?? "";
-  const floor = (await (
-    await page.request.get("/api/owner/floor", { headers: { "x-outlet-id": outletId } })
-  ).json()) as { sections: { tables: { label: string; qrToken: string }[] }[] };
-  const table = floor.sections.flatMap((s) => s.tables).find((t) => t.label === label);
-  if (!table) throw new Error(`no table ${label}`);
-  return table.qrToken;
-}
 
 test("guest menu: veg filter, search, Hindi toggle and live stock", async ({
   page,

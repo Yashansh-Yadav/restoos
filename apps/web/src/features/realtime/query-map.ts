@@ -7,14 +7,17 @@ import type { QueryClient, QueryKey } from "@tanstack/react-query";
 export const EVENT_QUERY_PREFIXES: { readonly [K in OutletEventName]: readonly QueryKey[] } = {
   "menu.changed": [["menu"], ["stock"], ["order-pad"], ["public-menu"]],
   "menu.stockChanged": [["menu"], ["stock"], ["order-pad"], ["public-menu"]],
-  "outlet.settingsChanged": [["menu"], ["stock"], ["order-pad"], ["public-menu"]],
+  "outlet.settingsChanged": [["menu"], ["stock"], ["order-pad"], ["public-menu"], ["table-orders"]],
   "floor.changed": [["floor"], ["staff-floor"], ["assignments"]],
   "assignment.changed": [["assignments"], ["staff-floor"]],
   "table.statusChanged": [["staff-floor"], ["order-pad"]],
-  "order.created": [["staff-floor"], ["order-pad"]],
+  "order.created": [["staff-floor"], ["order-pad"], ["table-orders"]],
   "kot.created": [["kitchen"], ["order-pad"], ["staff-floor"]],
   "kot.itemStatusChanged": [["kitchen"], ["order-pad"], ["staff-floor"], ["ready"]],
-  "order.itemVoided": [["kitchen"], ["order-pad"], ["ready"]],
+  "order.itemVoided": [["kitchen"], ["order-pad"], ["ready"], ["table-orders"]],
+  // M5-T6b: guest orders — the floor badge, the order screen's waiting card, the guest's list.
+  "order.pendingApproval": [["staff-floor"], ["order-pad"], ["table-orders"]],
+  "order.statusChanged": [["staff-floor"], ["order-pad"], ["table-orders"], ["kitchen"]],
 };
 
 /** Every key any event touches: refetched after a reconnect, in case events were missed. */

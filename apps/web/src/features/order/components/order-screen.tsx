@@ -25,6 +25,7 @@ import { sendOrder } from "../api";
 import { orderError, orderPadKey, useOrderPad } from "../hooks";
 import { CartSheet } from "./cart-sheet";
 import { OptionsSheet, type Draft } from "./options-sheet";
+import { PendingOrderCard } from "./pending-order";
 import { VoidSheet } from "./void-sheet";
 
 // Staff order screen (M5-T1). Click budget: table tap → item taps → "Send to Kitchen".
@@ -291,6 +292,21 @@ export function OrderScreen({
       </header>
 
       <main className="flex-1 px-4 pt-4 pb-40 sm:px-6">
+        {pad.pending.length > 0 ? (
+          <div className="mb-4 flex flex-col gap-3">
+            {pad.pending.map((o) => (
+              <PendingOrderCard
+                key={o.id}
+                order={o}
+                pricing={pad.pricing}
+                onDone={(message) => {
+                  setNotice(message);
+                  void client.invalidateQueries({ queryKey: orderPadKey(tableId) });
+                }}
+              />
+            ))}
+          </div>
+        ) : null}
         {shown.length === 0 ? (
           <p className="py-10 text-center text-base text-muted-foreground">
             {query ? `Nothing matches "${query}".` : "No dishes here yet."}

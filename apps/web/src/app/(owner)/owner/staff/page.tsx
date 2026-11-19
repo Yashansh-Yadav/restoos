@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { getMe } from "@/features/auth/api";
 import { AutoStartShift } from "@/features/outlet-settings/components/auto-start-shift";
 import { KotLateMinutes } from "@/features/outlet-settings/components/kot-late-minutes";
+import { OrderingMode } from "@/features/outlet-settings/components/ordering-mode";
 import { getOutletSettings } from "@/features/outlet-settings/server";
 import { StaffManager } from "@/features/staff/components/staff-manager";
 import { getStaff } from "@/features/staff/server";
@@ -44,6 +45,7 @@ export default async function StaffPage({
       <StaffManager outletId={outlet.id} initial={staff} />
       <AutoStartShift outletId={outlet.id} initial={settings.autoStartShift} />
       <KotLateMinutes outletId={outlet.id} initial={settings.kotLateMinutes} />
+      <OrderingMode outletId={outlet.id} initial={settings.orderingMode} />
     </main>
   );
 }

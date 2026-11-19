@@ -94,3 +94,17 @@ export const hydrated = (page: Page, selector: string) =>
     const el = document.querySelector(sel);
     return el !== null && Object.keys(el).some((k) => k.startsWith("__reactFiber"));
   }, selector);
+
+/** The QR token of an owner's table (the customer link is /t/<token>). */
+export async function tableToken(page: Page, label: string): Promise<string> {
+  const me = (await (await page.request.get("/api/me")).json()) as {
+    owner: { outlets: { id: string }[] };
+  };
+  const outletId = me.owner.outlets[0]?.id ?? "";
+  const floor = (await (
+    await page.request.get("/api/owner/floor", { headers: { "x-outlet-id": outletId } })
+  ).json()) as { sections: { tables: { label: string; qrToken: string }[] }[] };
+  const table = floor.sections.flatMap((s) => s.tables).find((t) => t.label === label);
+  if (!table) throw new Error(`no table ${label}`);
+  return table.qrToken;
+}

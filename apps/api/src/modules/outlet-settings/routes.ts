@@ -1,13 +1,13 @@
 import { apiErrorSchema, outletSettingsSchema, updateOutletSettingsSchema } from "@restoos/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { writeAudit } from "../../lib/audit";
-import { notFound } from "../../lib/errors";
+import { AppError, notFound } from "../../lib/errors";
 import type { ModuleDeps } from "../../module-deps";
 import { outletOf, tenantOf } from "../../plugins/tenant";
 
 // /api/owner/outlet/settings (M1-T7): outlet-level switches — shift auto-start, kitchen late time
-// (M5-T3). Guarded by
-// staff.manage until a general settings permission exists (it's a staff-scheduling setting).
+// (M5-T3), guest ordering from the QR menu (M5-T6b; ordering modes need CUSTOMER_SELF_ORDER).
+// Guarded by staff.manage until a general settings permission exists.
 
 const errors = {
   400: apiErrorSchema,
@@ -15,7 +15,7 @@ const errors = {
   403: apiErrorSchema,
   404: apiErrorSchema,
 };
-const select = { autoStartShift: true, kotLateMinutes: true };
+const select = { autoStartShift: true, kotLateMinutes: true, orderingMode: true };
 
 export const outletSettingsRoutes =
   (m: ModuleDeps): FastifyPluginAsyncZod =>
@@ -57,6 +57,19 @@ export const outletSettingsRoutes =
         const id = outletOf(request);
         const before = await db.outlet.findUnique({ where: { id }, select });
         if (!before) throw notFound("Outlet");
+        const mode = request.body.orderingMode;
+        if (
+          mode !== undefined &&
+          mode !== "VIEW_ONLY" &&
+          mode !== before.orderingMode &&
+          !(await m.entitlements.hasFeature(id, "CUSTOMER_SELF_ORDER"))
+        ) {
+          throw new AppError(
+            403,
+            "FEATURE_NOT_IN_PLAN",
+            "Guest ordering isn't included in your plan. Upgrade to Growth to turn it on.",
+          );
+        }
         const after = await db.outlet.update({ where: { id }, data: request.body, select });
         await writeAudit(db, ctx, "outlet.settingsChanged", "Outlet", id, { before, after });
         // Ordering mode etc. are part of the customer menu (M2-T5): bust its cache.

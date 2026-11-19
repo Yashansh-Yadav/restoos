@@ -7,6 +7,7 @@ import {
   type OrderPad,
   type PadAddOnGroup,
   type PadItem,
+  type OrderDecision,
   type VoidedItem,
   type voidItemInputSchema,
 } from "@restoos/shared";
@@ -135,7 +136,8 @@ export async function getOrderPad({ db, ctx }: OrderDeps, tableId: string): Prom
 
   const sent = session
     ? await db.orderItem.findMany({
-        where: { order: { tableSessionId: session.id } },
+        // Sent = staff sends and approved guest orders; waiting/turned-down guest orders aren't.
+        where: { order: { tableSessionId: session.id, status: { in: ["OPEN", "BILLED"] } } },
         orderBy: { createdAt: "asc" },
         select: {
           id: true,
@@ -147,6 +149,28 @@ export async function getOrderPad({ db, ctx }: OrderDeps, tableId: string): Prom
           addOns: true,
           status: true,
           voidReason: true,
+        },
+      })
+    : [];
+  const pending = session
+    ? await db.order.findMany({
+        where: { tableSessionId: session.id, status: "PENDING_APPROVAL" },
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          createdAt: true,
+          items: {
+            orderBy: { createdAt: "asc" },
+            select: {
+              id: true,
+              nameSnapshot: true,
+              quantity: true,
+              unitPrice: true,
+              taxRateBps: true,
+              note: true,
+              addOns: true,
+            },
+          },
         },
       })
     : [];
@@ -168,6 +192,19 @@ export async function getOrderPad({ db, ctx }: OrderDeps, tableId: string): Prom
       status: l.status,
       voidReason: l.status === "VOIDED" ? l.voidReason : null,
     })),
+    pending: pending.map((o) => ({
+      id: o.id,
+      createdAt: o.createdAt.toISOString(),
+      lines: o.items.map((l) => ({
+        id: l.id,
+        name: l.nameSnapshot,
+        quantity: l.quantity,
+        unitPrice: l.unitPrice,
+        taxRateBps: l.taxRateBps,
+        note: l.note,
+        addOns: addOnNames(l.addOns),
+      })),
+    })),
   };
 }
 
@@ -179,26 +216,16 @@ const addOnNames = (json: unknown): string[] =>
       )
     : [];
 
-const isUniqueViolation = (err: unknown) =>
-  err instanceof Error && "code" in err && err.code === "P2002";
+type LineInput = CreateOrderInput["items"][number];
 
-/** "Send to kitchen": one Order with its items, the table moved on, atomically. */
-export async function createOrder(
-  deps: OrderDeps,
-  input: CreateOrderInput,
-): Promise<CreatedOrder & { replay: boolean }> {
-  const { db, ctx, events } = deps;
-  const outlet = outletId(ctx);
-
-  // Rule 8: the same send again (a retry, an offline resync) changes nothing.
-  const existing = await db.order.findUnique({
-    where: { clientId: input.clientId },
-    select: replaySelect,
-  });
-  if (existing) return replayOf(existing, input.tableId);
-
+/**
+ * Re-prices order lines from the database (client prices are never trusted) and snapshots
+ * names, prices, tax and add-ons — shared by staff sends and guest orders (M5-T6b). Unknown
+ * (or another restaurant's) items are "not found"; unavailable ones are refused by name.
+ */
+export async function priceLines(db: TenantDb, ctx: TenantContext, items: readonly LineInput[]) {
   // Re-price from the database. Unknown (or another restaurant's) items are "not found".
-  const itemIds = [...new Set(input.items.map((l) => l.itemId))];
+  const itemIds = [...new Set(items.map((l) => l.itemId))];
   const menuItems = await db.menuItem.findMany({
     where: { id: { in: itemIds } },
     select: {
@@ -241,7 +268,7 @@ export async function createOrder(
     );
   }
 
-  const lines = input.items.map((l) => {
+  const lines = items.map((l) => {
     const m = byId.get(l.itemId);
     if (!m) throw notFound("Menu item"); // checked above; keeps the types honest
     const padItem = { ...m, addOnGroupIds: m.addOnGroups.map((g) => g.groupId) };
@@ -264,6 +291,28 @@ export async function createOrder(
       addOns,
     };
   });
+  return lines;
+}
+
+const isUniqueViolation = (err: unknown) =>
+  err instanceof Error && "code" in err && err.code === "P2002";
+
+/** "Send to kitchen": one Order with its items, the table moved on, atomically. */
+export async function createOrder(
+  deps: OrderDeps,
+  input: CreateOrderInput,
+): Promise<CreatedOrder & { replay: boolean }> {
+  const { db, ctx, events } = deps;
+  const outlet = outletId(ctx);
+
+  // Rule 8: the same send again (a retry, an offline resync) changes nothing.
+  const existing = await db.order.findUnique({
+    where: { clientId: input.clientId },
+    select: replaySelect,
+  });
+  if (existing) return replayOf(existing, input.tableId);
+
+  const lines = await priceLines(db, ctx, input.items);
 
   let saved: {
     order: { id: string };
@@ -457,3 +506,102 @@ export async function voidItem(
     remaining: line.quantity - input.quantity,
   };
 }
+
+// ── Guest orders: approve / turn down (M5-T6b) ──────────────────────────────
+// A guest order from the QR menu waits as PENDING_APPROVAL (items NEW, no KOT). Approve & Send
+// does what a staff send does — table to Ordered, KOT for exactly those items — in one
+// transaction, guarded so a double tap (or two butlers) can't approve twice. Turning it down
+// cancels the order; its items are voided with the reason the guest sees. Never sent, so not
+// audited (rule 7 covers voids of sent items).
+
+async function pendingGuestOrder(db: TenantDb, ctx: TenantContext, orderId: string) {
+  const order = await db.order.findFirst({
+    where: { id: orderId, outletId: outletId(ctx) },
+    select: { id: true, status: true, tableSession: { select: { tableId: true } } },
+  });
+  if (!order) throw notFound("Order");
+  if (order.status !== "PENDING_APPROVAL") {
+    throw new AppError(409, "ORDER_CHANGED", "This order was already handled.");
+  }
+  return order;
+}
+
+export async function approveOrder(
+  { db, ctx, events }: OrderDeps,
+  orderId: string,
+): Promise<OrderDecision> {
+  const outlet = outletId(ctx);
+  const order = await pendingGuestOrder(db, ctx, orderId);
+  const tableId = order.tableSession?.tableId ?? null;
+  const saved = await db.$transaction(async (tx) => {
+    const moved = await tx.order.updateMany({
+      where: { id: orderId, status: "PENDING_APPROVAL" },
+      data: { status: "OPEN" },
+    });
+    if (moved.count !== 1) {
+      throw new AppError(409, "ORDER_CHANGED", "This order was already handled.");
+    }
+    const table = tableId ? await applyTableTransition(tx, ctx, tableId, "order") : null;
+    const kot = await createKotForOrder(tx, ctx, orderId);
+    return { table, kot };
+  });
+  if (saved.table) await publishTableStatus(events, ctx, saved.table);
+  await events.publishEvent(ctx, "order.statusChanged", {
+    outletId: outlet,
+    orderId,
+    tableId,
+    status: "OPEN",
+  });
+  if (saved.kot && tableId) {
+    await events.publishEvent(ctx, "kot.created", {
+      outletId: outlet,
+      kotId: saved.kot.id,
+      number: saved.kot.number,
+      orderId,
+      tableId,
+    });
+  }
+  return {
+    id: orderId,
+    status: "OPEN",
+    kot: saved.kot ? { id: saved.kot.id, number: saved.kot.number } : null,
+  };
+}
+
+export async function rejectOrder(
+  { db, ctx, events }: OrderDeps,
+  orderId: string,
+  reason: string | undefined,
+): Promise<OrderDecision> {
+  const outlet = outletId(ctx);
+  const order = await pendingGuestOrder(db, ctx, orderId);
+  const voidedById = ctx.actor.kind === "staff" ? ctx.actor.employeeId : null;
+  await db.$transaction(async (tx) => {
+    const moved = await tx.order.updateMany({
+      where: { id: orderId, status: "PENDING_APPROVAL" },
+      data: { status: "CANCELLED" },
+    });
+    if (moved.count !== 1) {
+      throw new AppError(409, "ORDER_CHANGED", "This order was already handled.");
+    }
+    await tx.orderItem.updateMany({
+      where: { orderId, status: "NEW" },
+      data: {
+        status: "VOIDED",
+        voidReason: reason ?? NOT_ACCEPTED,
+        voidedById,
+        voidedAt: new Date(),
+      },
+    });
+  });
+  await events.publishEvent(ctx, "order.statusChanged", {
+    outletId: outlet,
+    orderId,
+    tableId: order.tableSession?.tableId ?? null,
+    status: "CANCELLED",
+  });
+  return { id: orderId, status: "CANCELLED", kot: null };
+}
+
+/** Stored when staff give no reason; the guest page shows its own translated wording. */
+export const NOT_ACCEPTED = "Not accepted";

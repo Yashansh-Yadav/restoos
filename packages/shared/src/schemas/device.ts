@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { staffRoleSchema } from "../enums";
+import { orderingModeSchema, staffRoleSchema } from "../enums";
 
 // Devices + staff sign-in (M1-T6, plan §6.3). The owner registers a device and gets a one-time
 // 8-digit pairing code; the device redeems it for a long-lived cookie; staff then tap their name
@@ -97,6 +97,8 @@ export const outletSettingsSchema = z.object({
   autoStartShift: z.boolean(),
   /** Kitchen display marks a ticket late after this many minutes (M5-T3). */
   kotLateMinutes: z.number().int().min(5, "At least 5 minutes").max(120, "At most 120 minutes"),
+  /** Guest ordering from the table QR (M5-T6b); ordering modes need CUSTOMER_SELF_ORDER. */
+  orderingMode: orderingModeSchema,
 });
 export const updateOutletSettingsSchema = outletSettingsSchema.partial();
 export type OutletSettings = z.infer<typeof outletSettingsSchema>;

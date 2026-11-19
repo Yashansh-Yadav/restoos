@@ -152,7 +152,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
             return publicMenu.bust(e.payload.outletId);
           }
         });
-        await api.register(publicRoutes({ publicMenu }));
+        await api.register(publicRoutes({ publicMenu, m: moduleDeps }));
         if (deps.storage.servesFiles) await api.register(fileRoutes(deps.storage));
         if (deps.devOtp && process.env.NODE_ENV !== "production") {
           await api.register(devRoutes(deps.devOtp));
