@@ -10,6 +10,8 @@ import {
   menuCategorySchema,
   menuItemSchema,
   outletSettingsSchema,
+  readyListSchema,
+  staffFloorSchema,
   type OutletEvent,
 } from "@restoos/shared";
 import type { LightMyRequestResponse } from "fastify";
@@ -163,6 +165,75 @@ describe("kitchen display (M5-T3)", () => {
       code(
         await other.owner("POST", `/api/staff/kots/${sent.kot?.id ?? ""}/stage`, { to: "READY" }),
       ),
+    ).toBe("NOT_FOUND");
+  });
+
+  it("lists ready tickets for the floor and serves them in one tap (with undo)", async () => {
+    const { r, t1, send, board, move } = await setup();
+    const rahul = await r.addStaff("Rahul", "BUTLER", "4827");
+    const butler = await r.signedInTablet(rahul.id, "4827");
+    await r.owner("PUT", `/api/staff/assignments/tables/${t1.id}`, { employeeId: rahul.id });
+    const events: OutletEvent[] = [];
+    const off = h.app.events.subscribe((_ctx, e) => {
+      events.push(e);
+    });
+
+    const cooking = await send(2);
+    const waiting = await send(1);
+    const kotId = cooking.kot?.id ?? "";
+    await move(kotId, "PREPARING");
+    await move(kotId, "READY");
+
+    const ready = async () =>
+      readyListSchema.parse((await butler.call("GET", "/api/staff/ready")).json()).kots;
+    expect(await ready()).toEqual([
+      expect.objectContaining({
+        kotId,
+        number: 1,
+        table: { id: t1.id, label: "T1" },
+        butlerName: "Rahul",
+        mine: true,
+        items: [expect.objectContaining({ name: "Dal Makhani", quantity: 2, status: "READY" })],
+      }),
+    ]);
+    const floor = async () =>
+      staffFloorSchema.parse((await butler.call("GET", "/api/staff/floor")).json()).sections[0]
+        ?.tables[0];
+    expect(await floor()).toMatchObject({ label: "T1", readyToServe: true });
+
+    // Not ready yet → refused.
+    const early = await butler.call("POST", `/api/staff/kots/${waiting.kot?.id ?? ""}/served`, {
+      served: true,
+    });
+    expect([early.statusCode, code(early)]).toEqual([409, "KOT_NOT_READY"]);
+
+    // Served: gone from the ready list and the kitchen board; the event says SERVED.
+    const served = await butler.call("POST", `/api/staff/kots/${kotId}/served`, { served: true });
+    expect(served.statusCode, served.body).toBe(200);
+    expect(await ready()).toEqual([]);
+    expect((await board()).kots.map((k) => k.number)).toEqual([2]);
+    expect(await floor()).toMatchObject({ readyToServe: false });
+    expect(
+      events.filter((e) => e.name === "kot.itemStatusChanged").map((e) => e.payload),
+    ).toContainEqual(expect.objectContaining({ kotId, tableId: t1.id, stage: "SERVED" }));
+
+    // Undo a mis-tap: back to ready.
+    expect(
+      (await butler.call("POST", `/api/staff/kots/${kotId}/served`, { served: false })).statusCode,
+    ).toBe(200);
+    expect((await ready()).map((k) => k.number)).toEqual([1]);
+    off();
+
+    // The kitchen doesn't serve; another restaurant can't touch it.
+    const imran = await r.addStaff("Imran", "KITCHEN", "5938");
+    const kitchen = await r.signedInTablet(imran.id, "5938");
+    expect(
+      (await kitchen.call("POST", `/api/staff/kots/${kotId}/served`, { served: true })).statusCode,
+    ).toBe(403);
+    h.clearCookies();
+    const other = await restaurant(h, "+919876500002");
+    expect(
+      code(await other.owner("POST", `/api/staff/kots/${kotId}/served`, { served: true })),
     ).toBe("NOT_FOUND");
   });
 });

@@ -27,12 +27,12 @@ export type OutletEvents = {
     orderId: string;
     tableId: string;
   };
-  /** The kitchen moved a ticket to New / Preparing / Ready (M5-T3). */
+  /** A ticket moved to New / Preparing / Ready (kitchen, M5-T3) or was served (butler, M5-T4). */
   "kot.itemStatusChanged": {
     outletId: string;
     kotId: string;
     tableId: string | null;
-    stage: KotStage;
+    stage: KotStage | "SERVED";
   };
 };
 

@@ -4,7 +4,9 @@ import {
   STAGE_ITEM_STATUS,
   type KitchenBoard,
   type KotStage,
+  type ReadyList,
 } from "@restoos/shared";
+import { activeAssignment } from "../../lib/assignments";
 import { AppError, notFound } from "../../lib/errors";
 import type { EventBus } from "../../lib/events";
 import type { TenantContext, TenantDb } from "../../lib/tenant";
@@ -126,4 +128,126 @@ export async function moveKot(
     stage: to,
   });
   return { id: kot.id, number: kot.number, stage: to };
+}
+
+// ── Ready to serve (M5-T4) ──────────────────────────────────────────────────
+
+/** Tickets the kitchen has marked Ready, oldest first, for the floor staff to serve. */
+export async function getReady({ db, ctx }: KitchenDeps): Promise<ReadyList> {
+  outletId(ctx);
+  const me = ctx.actor.kind === "staff" ? ctx.actor.employeeId : null;
+  const kots = await db.kot.findMany({
+    where: { items: { some: { status: "READY" } } },
+    orderBy: [{ createdAt: "asc" }, { number: "asc" }],
+    take: 200,
+    select: {
+      id: true,
+      number: true,
+      order: {
+        select: {
+          tableSession: {
+            select: {
+              table: {
+                select: {
+                  id: true,
+                  label: true,
+                  assignments: {
+                    where: activeAssignment,
+                    select: { employee: { select: { id: true, name: true } } },
+                    take: 1,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      items: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          nameSnapshot: true,
+          quantity: true,
+          addOns: true,
+          note: true,
+          status: true,
+          updatedAt: true,
+        },
+      },
+    },
+  });
+  return {
+    kots: kots.flatMap((k) => {
+      if (kotStage(k.items.map((i) => i.status)) !== "READY") return [];
+      const table = k.order.tableSession?.table ?? null;
+      const holder = table?.assignments[0]?.employee ?? null;
+      const ready = k.items.filter((i) => i.status === "READY");
+      const since = Math.max(...ready.map((i) => i.updatedAt.getTime()));
+      return [
+        {
+          kotId: k.id,
+          number: k.number,
+          readySince: new Date(since).toISOString(),
+          table: table ? { id: table.id, label: table.label } : null,
+          butlerName: holder?.name ?? null,
+          mine: me !== null && holder?.id === me,
+          items: ready.map((i) => ({
+            id: i.id,
+            name: i.nameSnapshot,
+            quantity: i.quantity,
+            addOns: addOnNames(i.addOns),
+            note: i.note,
+            status: i.status,
+          })),
+        },
+      ];
+    }),
+  };
+}
+
+/** Served (whole ticket), or undo (back to Ready) right after a mis-tap. */
+export async function setServed(
+  deps: KitchenDeps,
+  kotId: string,
+  served: boolean,
+): Promise<{ id: string; number: number; served: boolean }> {
+  const { db, ctx, events } = deps;
+  const outlet = outletId(ctx);
+  const kot = await db.kot.findUnique({
+    where: { id: kotId },
+    select: {
+      id: true,
+      number: true,
+      order: { select: { tableSession: { select: { tableId: true } } } },
+      items: { select: { status: true } },
+    },
+  });
+  if (!kot) throw notFound("Kitchen ticket");
+  const statuses = kot.items.map((i) => i.status);
+  if (served) {
+    if (kotStage(statuses) !== "READY") {
+      throw new AppError(409, "KOT_NOT_READY", `KOT #${kot.number} is still being prepared.`);
+    }
+    await db.orderItem.updateMany({
+      where: { kotId, status: "READY" },
+      data: { status: "SERVED" },
+    });
+  } else {
+    // Undo only while the whole ticket is served (nothing else has happened to it since).
+    const active = statuses.filter((s) => s !== "VOIDED");
+    if (active.length === 0 || active.some((s) => s !== "SERVED")) {
+      throw new AppError(409, "KOT_NOT_SERVED", `KOT #${kot.number} is not marked served.`);
+    }
+    await db.orderItem.updateMany({
+      where: { kotId, status: "SERVED" },
+      data: { status: "READY" },
+    });
+  }
+  await events.publishEvent(ctx, "kot.itemStatusChanged", {
+    outletId: outlet,
+    kotId,
+    tableId: kot.order.tableSession?.tableId ?? null,
+    stage: served ? "SERVED" : "READY",
+  });
+  return { id: kot.id, number: kot.number, served };
 }

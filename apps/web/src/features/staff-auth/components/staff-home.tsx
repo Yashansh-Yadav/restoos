@@ -5,6 +5,7 @@ import {
   Armchair,
   ChefHat,
   ChevronRight,
+  HandPlatter,
   Clock,
   LayoutGrid,
   Loader2,
@@ -116,6 +117,22 @@ export function StaffHome({ me }: { me: StaffMe }) {
             <span className="text-lg font-semibold">Floor</span>
             <span className="text-sm text-muted-foreground">
               Every table at a glance — seat guests, clear tables
+            </span>
+          </span>
+          <ChevronRight className="size-6 shrink-0 text-muted-foreground" aria-hidden="true" />
+        </Link>
+      ) : null}
+
+      {me.permissions.includes("order.create") ? (
+        <Link
+          href="/staff/ready"
+          className="flex min-h-touch-hero [touch-action:manipulation] items-center gap-4 rounded-md border border-border px-4 py-3 transition-colors duration-150 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring active:bg-secondary"
+        >
+          <HandPlatter className="size-7 shrink-0" aria-hidden="true" />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="text-lg font-semibold">Ready to Serve</span>
+            <span className="text-sm text-muted-foreground">
+              Dishes the kitchen has ready — tap Served when they reach the table
             </span>
           </span>
           <ChevronRight className="size-6 shrink-0 text-muted-foreground" aria-hidden="true" />

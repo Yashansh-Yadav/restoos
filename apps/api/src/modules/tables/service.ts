@@ -14,7 +14,7 @@ export type TablesDeps = { db: TenantDb; ctx: TenantContext; events: EventBus };
 export async function getStaffFloor({ db, ctx }: TablesDeps): Promise<StaffFloor> {
   if (!ctx.outletId) throw new AppError(400, "OUTLET_REQUIRED", "Choose an outlet first");
   const me = ctx.actor.kind === "staff" ? ctx.actor.employeeId : null;
-  const [sections, assignments, sessions, bells, pending] = await Promise.all([
+  const [sections, assignments, sessions, bells, pending, ready] = await Promise.all([
     db.section.findMany({
       select: {
         id: true,
@@ -42,11 +42,18 @@ export async function getStaffFloor({ db, ctx }: TablesDeps): Promise<StaffFloor
       where: { status: "PENDING_APPROVAL", tableSession: { closedAt: null } },
       select: { tableSession: { select: { tableId: true } } },
     }),
+    db.orderItem.findMany({
+      where: { status: "READY", order: { tableSession: { closedAt: null } } },
+      select: { order: { select: { tableSession: { select: { tableId: true } } } } },
+    }),
   ]);
 
   const holder = new Map(assignments.map((a) => [a.tableId, a.employee]));
   const since = new Map(sessions.map((s) => [s.tableId, s.openedAt.toISOString()]));
   const ringing = new Set(bells.map((b) => b.tableId));
+  const readyTables = new Set(
+    ready.flatMap((i) => (i.order.tableSession ? [i.order.tableSession.tableId] : [])),
+  );
   const waiting = new Set(pending.flatMap((o) => (o.tableSession ? [o.tableSession.tableId] : [])));
 
   return {
@@ -60,6 +67,7 @@ export async function getStaffFloor({ db, ctx }: TablesDeps): Promise<StaffFloor
         mine: me !== null && holder.get(t.id)?.id === me,
         activeBell: ringing.has(t.id),
         pendingApproval: waiting.has(t.id),
+        readyToServe: readyTables.has(t.id),
         since: since.get(t.id) ?? null,
       })),
     })),

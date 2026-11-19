@@ -9,7 +9,16 @@ import {
   type TableStatus,
 } from "@restoos/shared";
 import { useQueryClient } from "@tanstack/react-query";
-import { Bell, Brush, ClipboardCheck, Loader2, ReceiptText, RefreshCw } from "lucide-react";
+import {
+  Bell,
+  Brush,
+  ClipboardCheck,
+  HandPlatter,
+  Loader2,
+  ReceiptText,
+  RefreshCw,
+} from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -92,6 +101,7 @@ export function StaffFloorView({ initial }: { initial: StaffFloor }) {
   const section = floor.sections.find((s) => s.id === sectionId) ?? floor.sections[0];
   const open = all.find((t) => t.id === openId) ?? null;
   const mineOnly = onlyMine && hasMine;
+  const readyCount = all.filter((t) => t.readyToServe && (!mineOnly || t.mine)).length;
   const alerts = (s: { tables: StaffFloorTable[] }) =>
     s.tables.filter((t) => (t.activeBell || t.pendingApproval) && (!mineOnly || t.mine)).length;
 
@@ -148,7 +158,19 @@ export function StaffFloorView({ initial }: { initial: StaffFloor }) {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-[28px] leading-tight font-bold">Floor</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/staff/ready"
+            className={cn(
+              "inline-flex min-h-touch items-center gap-2 rounded-md px-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+              readyCount > 0
+                ? "bg-success text-success-foreground"
+                : "border border-input text-muted-foreground hover:bg-muted",
+            )}
+          >
+            <HandPlatter className="size-4" aria-hidden="true" />
+            Ready to Serve <span className="tabular-nums">({readyCount})</span>
+          </Link>
           {hasMine ? (
             <div
               role="group"
@@ -261,6 +283,7 @@ export function StaffFloorView({ initial }: { initial: StaffFloor }) {
               t.butlerName ? `with ${t.butlerName}` : null,
               t.activeBell ? "bell ringing" : null,
               t.pendingApproval ? "order waiting for approval" : null,
+              t.readyToServe ? "food ready to serve" : null,
             ]
               .filter(Boolean)
               .join(", ");
@@ -283,11 +306,16 @@ export function StaffFloorView({ initial }: { initial: StaffFloor }) {
                 <span className="text-[11px] leading-none font-semibold">
                   {STATUS[t.status].word}
                 </span>
-                {t.activeBell || t.pendingApproval ? (
+                {t.activeBell || t.pendingApproval || t.readyToServe ? (
                   <span className="absolute -top-2 -right-2 flex gap-0.5">
                     {t.activeBell ? (
                       <span className="flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
                         <Bell className="size-3.5" aria-hidden="true" />
+                      </span>
+                    ) : null}
+                    {t.readyToServe ? (
+                      <span className="flex size-6 items-center justify-center rounded-full bg-success text-success-foreground">
+                        <HandPlatter className="size-3.5" aria-hidden="true" />
                       </span>
                     ) : null}
                     {t.pendingApproval ? (
@@ -314,6 +342,9 @@ export function StaffFloorView({ initial }: { initial: StaffFloor }) {
         </li>
         <li className="flex items-center gap-1 rounded-full bg-info px-2.5 py-1 font-semibold text-info-foreground">
           <ClipboardCheck className="size-3" aria-hidden="true" /> To approve
+        </li>
+        <li className="flex items-center gap-1 rounded-full bg-success px-2.5 py-1 font-semibold text-success-foreground">
+          <HandPlatter className="size-3" aria-hidden="true" /> Ready
         </li>
       </ul>
 

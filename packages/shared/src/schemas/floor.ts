@@ -139,6 +139,8 @@ export const staffFloorTableSchema = z.object({
   activeBell: z.boolean(),
   /** A customer order waits for staff approval (M5). */
   pendingApproval: z.boolean(),
+  /** The kitchen has food ready for this table (M5-T4). */
+  readyToServe: z.boolean(),
   /** When the current guests sat down (open session), ISO time. */
   since: z.string().nullable(),
 });
